@@ -7,7 +7,7 @@ import { cn } from '../lib/cn.ts';
 import { useStore } from '../lib/store.ts';
 
 const NAV = [
-  { to: '/', label: 'Recipes', icon: BookOpen, end: true },
+  { to: '/recipes', label: 'Recipes', icon: BookOpen },
   { to: '/shopping', label: 'Shopping', icon: ShoppingCart },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
@@ -83,7 +83,7 @@ export function Layout() {
           ))}
         </aside>}
         <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
-          <form className="bt-top bt-shell sticky top-0 z-10 p-3 backdrop-blur" onSubmit={(e) => { e.preventDefault(); if (q.trim()) nav(`/?q=${encodeURIComponent(q.trim())}`); }}>
+          <form className="bt-top bt-shell sticky top-0 z-10 p-3 backdrop-blur" onSubmit={(e) => { e.preventDefault(); if (q.trim()) nav(`/recipes?q=${encodeURIComponent(q.trim())}`); }}>
             <div className="bt-topin relative mx-auto flex max-w-3xl items-center gap-3">
               <div className={cn('flex shrink-0 items-center gap-2 font-bold', !noSide && 'md:hidden')}><img src={logo} alt="TurboPantry" width={28} height={28} className="h-7 w-7 shrink-0" draggable={false} />{topbar && <span className="hidden md:inline">TurboPantry</span>}</div>
               {topbar && <nav className="bt-toplinks hidden min-w-0 items-center gap-6 overflow-x-auto md:flex" aria-label="Pages">

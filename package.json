@@ -3,13 +3,16 @@
   "private": true,
   "version": "0.0.0",
   "description": "TurboPantry: a self-hosted recipe box and shared shopping list.",
+  "license": "MIT",
   "packageManager": "pnpm@10.28.0",
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "dev:server": "pnpm --filter @turbopantry/server dev",
     "dev:web": "pnpm --filter @turbopantry/web dev",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck",
-    "build": "pnpm --filter @turbopantry/web build && pnpm --filter @turbopantry/server bundle"
+    "build": "pnpm --filter @turbopantry/web build"
   }
 }

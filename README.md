@@ -1,26 +1,23 @@
 # TurboPantry
 
-A self-hosted recipe box and shared shopping list. Import recipes from websites, Instagram and Osta links; keep them in one place; add a recipe's ingredients to a shopping list that stays in sync between the people who share it.
+A self-hosted recipe box and shared shopping list. Import recipes from websites (Instagram and Osta links are next), keep them in one place, and add a recipe's ingredients to a shopping list that stays in sync between the people who share it.
 
-**Status: early.** The server, the web client (themes, settings, in-app guides), accounts and the release pipeline exist. Recipes, importing and shopping lists are the next milestones (see `PROJECT_BRIEF.md`).
+## Features
+- Recipes: write, edit, search (title, tags, ingredient names), scale servings, tick ingredients off.
+- Import from recipe websites (schema.org recipe data); you review the draft before it is saved.
+- A few accounts on one server, each with its own token; built to sit behind a Cloudflare Tunnel (Cloudflare Access service tokens supported).
+- Themes, UI styles and layouts from turbothemes; guides inside the app (Settings → Guides).
+- Free to run: nothing needs a paid service.
+- Coming: shopping lists with live sync, Osta link and Instagram import, an Android app.
 
-- Free to run: no paid service is needed anywhere.
-- Meant to sit behind a Cloudflare Tunnel: every API route except `/api/health` needs a token.
-- Installs as one Node file; Docker is optional.
-- Built on [turboengine](https://github.com/TurboNZL/turboengine) (pinned in `.turboengine.json`).
-
-## Run it
-You need **Node 22.13 or newer** and nothing else (the database is built into Node).
+## Running it
+**A home server (Linux or a Raspberry Pi), one command:**
 ```
-# download turbopantry-server-<version>-node.tar.gz from the releases page and unpack it
-node server.mjs add-user YourName      # prints your token once
-node server.mjs                        # serves on http://<host>:47900
+curl -fsSL https://raw.githubusercontent.com/TurboNZL/turbopantry/main/scripts/install-pi.sh | sudo bash -s -- --data-dir /var/lib/turbopantry
 ```
-Open the address, then Settings → Server and paste the token. Running it as a service, backups and the settings: `docs/guides/SELF_HOSTING.md` (also inside the app, Settings → Guides).
+It installs Node, makes a service user, downloads and builds the app, starts it, makes the owner account and prints the address and token. Details, other machines and backups: `docs/guides/SELF_HOSTING.md`.
 
-**Docker is optional.** If you prefer it there is an image: `docker run -d -p 47900:47900 -v turbopantry-data:/data ghcr.io/turbonzl/turbopantry:latest`.
-
-## Develop
+**To develop:**
 ```
 pnpm install
 pnpm dev:server      # API on 47900, data in ./data
@@ -28,3 +25,12 @@ pnpm dev:web         # client on 5173, proxies /api to the server
 pnpm typecheck && pnpm test && pnpm build
 ```
 Read `CLAUDE.md` first (decisions and running log), then `PROJECT_BRIEF.md`.
+
+## Releases and updates
+Every merge to `main` becomes a release (`vYYYY.M.N`). The server updates itself from `main` (Settings → Server → Update server, or `scripts/update.sh`); see `docs/guides/UPDATING.md`.
+
+## Engine
+Built on [TurboNZL/turboengine](https://github.com/TurboNZL/turboengine) (`.turboengine.json` says which commit and modules).
+
+## License
+MIT, see `LICENSE`.

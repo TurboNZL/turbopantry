@@ -4,12 +4,14 @@ TurboPantry is pinned to [TurboNZL/turboengine](https://github.com/TurboNZL/turb
 
 | Module | State | Where |
 |---|---|---|
-| `release-pipeline` | adapted (no Electron/desktop jobs; server tarball, plus an optional Docker image) | `.github/workflows/` |
-| `appearance` | in, renamed (storage prefix `turbopantry`, bridge names `turbopantryDesktop` / `TurboPantryAndroid`); layouts `toolbar` and the player rules dropped | `apps/web/src/lib/appearance.ts`, `layout.ts`, `layouts.css`, `components/AppearanceCard.tsx`, `ThemeUpdates.tsx` |
-| `guides-and-docs` | in; guide table in `lib/guides.ts` lists TurboPantry's guides | `apps/web/src/lib/guides.ts`, `markdown.ts`, `components/GuidesTab.tsx`, `docs/guides/` |
-| `settings-shell` | partly: wrapping tab strip and `Section` only; no pairing code yet | `pages/SettingsPage.tsx`, `components/Section.tsx` |
-| `updaters` | not yet (Android only, comes with the Android shell) | |
-| `android-shell` | not yet | |
-| `editions`, `window-frame` | deliberately skipped (no Electron) | |
+| `release-pipeline` | adapted: only the `release` job (tag + GitHub release); the server is not a release asset. The APK job joins with Android | `.github/workflows/` |
+| `appearance` | in, renamed (storage prefix `turbopantry`, bridge names `turbopantryDesktop` / `TurboPantryAndroid`); layout `toolbar` and the player rules dropped | `apps/web/src/lib/appearance.ts`, `layout.ts`, `layouts.css`, `components/AppearanceCard.tsx`, `ThemeUpdates.tsx` |
+| `guides-and-docs` | in; the guide table in `lib/guides.ts` lists TurboPantry's guides | `apps/web/src/lib/guides.ts`, `markdown.ts`, `components/GuidesTab.tsx`, `docs/guides/` |
+| `settings-shell` | partly: wrapping tab strip and `Section`; pairing is `device-pairing`, planned | `pages/SettingsPage.tsx`, `components/Section.tsx` |
+| `self-hosted-server` | the mandatory set for an app with its own server; satisfied by the four rows below | |
+| `server-install-update` | in. `scripts/install-pi.sh` and `scripts/update.sh` renamed (service/user/folder `turbopantry`, `TURBOPANTRY_*`, no ffmpeg/yt-dlp; the installer also makes the first account). `update.ts` verbatim. `ServerUpdate.tsx` uses `useApi`. Differences from TurboMusic: accounts, so only the owner (first account) may update; the version shown comes from `git describe` | `packages/server/src/update.ts`, `index.ts`, `scripts/`, `apps/web/src/components/ServerUpdate.tsx`, `docs/guides/` |
+| `cloudflare-access` | partly: `accessHeaders` in `lib/api.ts` and the Settings fields. `accessMedia.ts` and `sse.ts` come with live list sync; `AccessProxy.kt` with Android | `apps/web/src/lib/api.ts`, `components/ServerCard.tsx` |
+| `updaters`, `android-shell`, `device-pairing`, `termux-server` | not yet: they arrive with the Android app (listed under `planned`) | |
+| `editions`, `window-frame`, `gpu-modes`, `discord-presence` | deliberately skipped (no Electron) | |
 
 Changes made to copied files (candidates to port back to the engine): see the session log in `CLAUDE.md`.

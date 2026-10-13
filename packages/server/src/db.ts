@@ -11,6 +11,30 @@ const MIGRATIONS: string[] = [
      token_hash TEXT NOT NULL,
      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
    );`,
+  `CREATE TABLE recipes (
+     id INTEGER PRIMARY KEY,
+     title TEXT NOT NULL,
+     description TEXT NOT NULL DEFAULT '',
+     image_url TEXT,
+     source_url TEXT,
+     source_name TEXT,
+     servings REAL,
+     prep_minutes REAL,
+     cook_minutes REAL,
+     total_minutes REAL,
+     ingredients TEXT NOT NULL DEFAULT '[]',
+     steps TEXT NOT NULL DEFAULT '[]',
+     tags TEXT NOT NULL DEFAULT '[]',
+     notes TEXT NOT NULL DEFAULT '',
+     search_text TEXT NOT NULL DEFAULT '',
+     created_by TEXT NOT NULL,
+     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+   );
+   CREATE INDEX recipes_updated ON recipes (updated_at DESC);`,
+  // the first account ever made is the owner and may update the server; others are household members
+  `ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0;
+   UPDATE users SET is_admin = 1 WHERE id = (SELECT MIN(id) FROM users);`,
 ];
 
 export type Db = DatabaseSync;
@@ -34,17 +58,22 @@ const hash = (token: string) => createHash('sha256').update(token).digest('hex')
 export function addUser(db: Db, name: string): string {
   const clean = name.trim();
   if (!clean) throw new Error('A user needs a name.');
+  const first = countUsers(db) === 0;
   const token = `tp_${randomBytes(24).toString('base64url')}`;
-  db.prepare('INSERT INTO users (name, token_hash) VALUES (?, ?)').run(clean, hash(token));
+  db.prepare('INSERT INTO users (name, token_hash, is_admin) VALUES (?, ?, ?)').run(clean, hash(token), first ? 1 : 0);
   return token;
 }
 
-export function userForToken(db: Db, token: string): { id: number; name: string } | null {
+export interface User { id: number; name: string; isAdmin: boolean }
+
+export const listUsers = (db: Db): User[] => (db.prepare('SELECT id, name, is_admin FROM users ORDER BY id').all() as { id: number; name: string; is_admin: number }[]).map((r) => ({ id: r.id, name: r.name, isAdmin: !!r.is_admin }));
+
+export function userForToken(db: Db, token: string): User | null {
   const want = Buffer.from(hash(token));
-  const rows = db.prepare('SELECT id, name, token_hash FROM users').all() as { id: number; name: string; token_hash: string }[];
+  const rows = db.prepare('SELECT id, name, token_hash, is_admin FROM users').all() as { id: number; name: string; token_hash: string; is_admin: number }[];
   for (const r of rows) {
     const have = Buffer.from(r.token_hash);
-    if (have.length === want.length && timingSafeEqual(have, want)) return { id: r.id, name: r.name };
+    if (have.length === want.length && timingSafeEqual(have, want)) return { id: r.id, name: r.name, isAdmin: !!r.is_admin };
   }
   return null;
 }

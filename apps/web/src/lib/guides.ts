@@ -8,8 +8,8 @@ const readme = import.meta.glob('../../../../README.md', { query: '?raw', import
 export interface Guide { name: string; title: string; group: 'Start' | 'Apps' | 'Servers'; load: () => Promise<string> }
 
 const TITLE: Record<string, [string, Guide['group']]> = {
-  GETTING_STARTED: ['Getting started', 'Start'], README: ['About TurboPantry', 'Start'],
-  SELF_HOSTING: ['Self-hosting', 'Servers'], CLOUDFLARE_TUNNEL: ['Reaching it from outside (Cloudflare Tunnel)', 'Servers'],
+  GETTING_STARTED: ['Getting started', 'Start'], IMPORTING: ['Importing recipes', 'Start'], README: ['About TurboPantry', 'Start'],
+  SELF_HOSTING: ['Self-hosting', 'Servers'], UPDATING: ['Updating the server', 'Servers'], CLOUDFLARE_TUNNEL: ['Reaching it from outside (Cloudflare Tunnel)', 'Servers'],
 };
 const ORDER = Object.keys(TITLE);
 
