@@ -51,7 +51,7 @@ jobs:
           mkdir -p release
           cp packages/server/dist/server.mjs release/
           cp -r apps/web/dist release/web
-      - name: Attach the server bundle (lowercase name: turbopantry-server-<version>-node.tar.gz)
+      - name: Attach the server bundle, named turbopantry-server-VERSION-node.tar.gz
         run: |
           TAG='${{ needs.release.outputs.tag }}'
           tar -czf "turbopantry-server-${TAG#v}-node.tar.gz" -C release .
@@ -59,7 +59,7 @@ jobs:
         env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
       - uses: docker/login-action@v3
         with: { registry: ghcr.io, username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}' }
-      - name: Build and push the Docker image (ghcr.io/<owner>/turbopantry:<version> and :latest)
+      - name: Build and push the Docker image, tagged with the version and latest
         run: |
           IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
           TAG='${{ needs.release.outputs.tag }}'
