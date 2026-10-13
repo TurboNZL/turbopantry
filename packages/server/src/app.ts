@@ -3,6 +3,10 @@ import { existsSync, statSync, createReadStream } from 'node:fs';
 import { extname, join, normalize, sep } from 'node:path';
 import { APP_NAME, type Health, type Status } from '@turbopantry/shared';
 import { countUsers, userForToken, type Db } from './db.ts';
+import { countRecipes, createRecipe, deleteRecipe, getRecipe, listRecipes, updateRecipe, validateRecipe } from './recipes.ts';
+import { importFromUrl } from './import/index.ts';
+import type { PageFetcher } from './import/safeFetch.ts';
+import { safeFetchPage } from './import/safeFetch.ts';
 
 declare const __APP_VERSION__: string | undefined;
 export const VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
@@ -22,15 +26,31 @@ function bearer(req: IncomingMessage): string | null {
   return m?.[1] ?? null;
 }
 
-export interface AppOptions { db: Db; webDir?: string }
+export interface AppOptions { db: Db; webDir?: string; /** How pages are fetched for import. Tests pass a fake; the default refuses private addresses. */ fetchPage?: PageFetcher }
+
+const MAX_BODY = 1024 * 1024;
+class HttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) { super(message); this.status = status; }
+}
+
+async function readJson(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = []; let size = 0;
+  for await (const c of req as AsyncIterable<Buffer>) { size += c.length; if (size > MAX_BODY) throw new HttpError(413, 'That request is too large.'); chunks.push(c); }
+  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new HttpError(400, 'The request body is not valid JSON.'); }
+}
 
 /** The whole HTTP surface. Every /api route except /api/health needs a token: the server is meant to sit behind a public tunnel. */
-export function createApp({ db, webDir }: AppOptions): Server {
+export function createApp({ db, webDir, fetchPage = safeFetchPage }: AppOptions): Server {
   return createServer((req, res) => {
-    try { handle(req, res); } catch (e) { console.error(e); if (!res.headersSent) json(res, 500, { error: 'Server error' }); else res.end(); }
+    handle(req, res).catch((e) => {
+      if (e instanceof HttpError) return json(res, e.status, { error: e.message });
+      console.error(e);
+      if (!res.headersSent) json(res, 500, { error: 'Server error' }); else res.end();
+    });
   });
 
-  function handle(req: IncomingMessage, res: ServerResponse) {
+  async function handle(req: IncomingMessage, res: ServerResponse) {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const path = url.pathname;
 
@@ -42,12 +62,44 @@ export function createApp({ db, webDir }: AppOptions): Server {
       const user = token ? userForToken(db, token) : null;
       if (!user) return json(res, 401, { error: 'Wrong or missing token' });
       if (path === '/api/status' && req.method === 'GET') {
-        return json(res, 200, { user: user.name, users: countUsers(db), recipes: 0, lists: 0 } satisfies Status);
+        return json(res, 200, { user: user.name, users: countUsers(db), recipes: countRecipes(db), lists: 0 } satisfies Status);
       }
-      return json(res, 404, { error: 'Not found' });
+      return api(path, url, req, res, user.name);
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'Method not allowed' });
     return serveWeb(path, req, res);
+  }
+
+  async function api(path: string, url: URL, req: IncomingMessage, res: ServerResponse, userName: string) {
+    const m = req.method ?? 'GET';
+    if (path === '/api/recipes') {
+      if (m === 'GET') return json(res, 200, listRecipes(db, url.searchParams.get('q') ?? ''));
+      if (m === 'POST') {
+        const r = validateRecipe(await readJson(req));
+        return typeof r === 'string' ? json(res, 400, { error: r }) : json(res, 201, createRecipe(db, r, userName));
+      }
+      return json(res, 405, { error: 'Method not allowed' });
+    }
+    const one = /^\/api\/recipes\/(\d+)$/.exec(path);
+    if (one) {
+      const id = Number(one[1]);
+      if (m === 'GET') { const r = getRecipe(db, id); return r ? json(res, 200, r) : json(res, 404, { error: 'No such recipe' }); }
+      if (m === 'PUT') {
+        const r = validateRecipe(await readJson(req));
+        if (typeof r === 'string') return json(res, 400, { error: r });
+        const saved = updateRecipe(db, id, r);
+        return saved ? json(res, 200, saved) : json(res, 404, { error: 'No such recipe' });
+      }
+      if (m === 'DELETE') return deleteRecipe(db, id) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'No such recipe' });
+      return json(res, 405, { error: 'Method not allowed' });
+    }
+    if (path === '/api/import' && m === 'POST') {
+      const body = await readJson(req) as { url?: unknown };
+      if (typeof body?.url !== 'string' || !body.url.trim()) return json(res, 400, { error: 'Send {"url": "https://..."}', code: 'bad-url' });
+      const result = await importFromUrl(body.url.trim(), fetchPage);
+      return 'recipe' in result ? json(res, 200, result) : json(res, 422, result);
+    }
+    return json(res, 404, { error: 'Not found' });
   }
 
   function serveWeb(path: string, req: IncomingMessage, res: ServerResponse) {

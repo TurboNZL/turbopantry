@@ -2,7 +2,7 @@
 
 A self-hosted recipe box and shared shopping list. Import recipes from websites, Instagram and Osta links; keep them in one place; add a recipe's ingredients to a shopping list that stays in sync between the people who share it.
 
-**Status: early.** The server, the web client (themes, settings, in-app guides), accounts and the release pipeline exist. Recipes, importing and shopping lists are the next milestones (see `PROJECT_BRIEF.md`).
+**Status: early.** Working: accounts, recipes (write, edit, search, scale servings), import from recipe websites, themes and settings, in-app guides, the release pipeline. Next: Osta link import, shopping lists, Instagram import, the Android app (see `PROJECT_BRIEF.md`).
 
 - Free to run: no paid service is needed anywhere.
 - Meant to sit behind a Cloudflare Tunnel: every API route except `/api/health` needs a token.

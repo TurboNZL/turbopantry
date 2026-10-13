@@ -11,6 +11,27 @@ const MIGRATIONS: string[] = [
      token_hash TEXT NOT NULL,
      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
    );`,
+  `CREATE TABLE recipes (
+     id INTEGER PRIMARY KEY,
+     title TEXT NOT NULL,
+     description TEXT NOT NULL DEFAULT '',
+     image_url TEXT,
+     source_url TEXT,
+     source_name TEXT,
+     servings REAL,
+     prep_minutes REAL,
+     cook_minutes REAL,
+     total_minutes REAL,
+     ingredients TEXT NOT NULL DEFAULT '[]',
+     steps TEXT NOT NULL DEFAULT '[]',
+     tags TEXT NOT NULL DEFAULT '[]',
+     notes TEXT NOT NULL DEFAULT '',
+     search_text TEXT NOT NULL DEFAULT '',
+     created_by TEXT NOT NULL,
+     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+   );
+   CREATE INDEX recipes_updated ON recipes (updated_at DESC);`,
 ];
 
 export type Db = DatabaseSync;
