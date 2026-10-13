@@ -46,7 +46,7 @@ export function ServerUpdateCard() {
   };
   return (
     <Section title="Update server">
-      <p className="text-sm text-muted">Downloads the newest version of TurboPantry onto the server, rebuilds the web client and restarts the server. Your recipes and lists are not touched. The apps on your devices update separately (Settings → This app); a browser gets the new web client when you reload it.</p>
+      <p className="text-sm text-muted">Downloads the newest version of TurboPantry onto the server, rebuilds the web client and restarts the server. Your recipes and lists are not touched. Apps installed on devices update separately; a browser gets the new web client when you reload it.</p>
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <button className="btn btn-accent" disabled={running} onClick={() => void start()}><ArrowUpCircle size={15} />{running ? 'Updating…' : 'Update server'}</button>
         {updated && !running && <button className="btn" onClick={() => location.reload()}>Reload this page</button>}
