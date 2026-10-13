@@ -4,7 +4,7 @@ TurboPantry is pinned to [TurboNZL/turboengine](https://github.com/TurboNZL/turb
 
 | Module | State | Where |
 |---|---|---|
-| `release-pipeline` | adapted (no Electron/desktop jobs; server tarball and Docker image instead) | `.github/workflows/` |
+| `release-pipeline` | adapted (no Electron/desktop jobs; server tarball, plus an optional Docker image) | `.github/workflows/` |
 | `appearance` | in, renamed (storage prefix `turbopantry`, bridge names `turbopantryDesktop` / `TurboPantryAndroid`); layouts `toolbar` and the player rules dropped | `apps/web/src/lib/appearance.ts`, `layout.ts`, `layouts.css`, `components/AppearanceCard.tsx`, `ThemeUpdates.tsx` |
 | `guides-and-docs` | in; guide table in `lib/guides.ts` lists TurboPantry's guides | `apps/web/src/lib/guides.ts`, `markdown.ts`, `components/GuidesTab.tsx`, `docs/guides/` |
 | `settings-shell` | partly: wrapping tab strip and `Section` only; no pairing code yet | `pages/SettingsPage.tsx`, `components/Section.tsx` |

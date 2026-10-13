@@ -6,17 +6,19 @@ A self-hosted recipe box and shared shopping list. Import recipes from websites,
 
 - Free to run: no paid service is needed anywhere.
 - Meant to sit behind a Cloudflare Tunnel: every API route except `/api/health` needs a token.
+- Installs as one Node file; Docker is optional.
 - Built on [turboengine](https://github.com/TurboNZL/turboengine) (pinned in `.turboengine.json`).
 
 ## Run it
-**Docker** (from the latest release):
+You need **Node 22.13 or newer** and nothing else (the database is built into Node).
 ```
-docker run -d --name turbopantry -p 47900:47900 -v turbopantry-data:/data ghcr.io/turbonzl/turbopantry:latest
-docker exec turbopantry node server.mjs add-user YourName      # prints your token once
+# download turbopantry-server-<version>-node.tar.gz from the releases page and unpack it
+node server.mjs add-user YourName      # prints your token once
+node server.mjs                        # serves on http://<host>:47900
 ```
-**Node 22.13 or newer:** download `turbopantry-server-<version>-node.tar.gz` from the releases page, unpack it, then `node server.mjs add-user YourName` and `node server.mjs`.
+Open the address, then Settings → Server and paste the token. Running it as a service, backups and the settings: `docs/guides/SELF_HOSTING.md` (also inside the app, Settings → Guides).
 
-Open `http://<host>:47900`, then Settings → Server and paste the token. More: `docs/guides/SELF_HOSTING.md` (also inside the app, Settings → Guides).
+**Docker is optional.** If you prefer it there is an image: `docker run -d -p 47900:47900 -v turbopantry-data:/data ghcr.io/turbonzl/turbopantry:latest`.
 
 ## Develop
 ```
