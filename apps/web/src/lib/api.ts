@@ -1,6 +1,10 @@
-import type { Health, ImportError, Recipe, RecipeInput, RecipeSummary, Status } from '@turbopantry/shared';
+import type { Health, ImportError, Recipe, RecipeInput, RecipeSummary, ServerUpdate, Status } from '@turbopantry/shared';
 
-export interface ApiConfig { serverUrl: string; token: string }
+export interface ApiConfig { serverUrl: string; token: string; cfAccessId?: string; cfAccessSecret?: string }
+
+/** The two headers a server behind Cloudflare Access wants on every request (turboengine module cloudflare-access). */
+export const accessHeaders = (s: { cfAccessId?: string; cfAccessSecret?: string }): Record<string, string> =>
+  s.cfAccessId?.trim() && s.cfAccessSecret?.trim() ? { 'CF-Access-Client-Id': s.cfAccessId.trim(), 'CF-Access-Client-Secret': s.cfAccessSecret.trim() } : {};
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public code?: string) { super(message); }
@@ -12,7 +16,7 @@ export class Api {
 
   private async call<T>(method: string, path: string, body?: unknown, auth = true): Promise<T> {
     const base = this.cfg.serverUrl.replace(/\/+$/, '');
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...accessHeaders(this.cfg) };
     if (auth && this.cfg.token) headers.authorization = `Bearer ${this.cfg.token}`;
     if (body !== undefined) headers['content-type'] = 'application/json';
     const res = await fetch(`${base}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -28,5 +32,7 @@ export class Api {
   createRecipe(r: RecipeInput) { return this.call<Recipe>('POST', '/api/recipes', r); }
   updateRecipe(id: number, r: RecipeInput) { return this.call<Recipe>('PUT', `/api/recipes/${id}`, r); }
   deleteRecipe(id: number) { return this.call<{ ok: true }>('DELETE', `/api/recipes/${id}`); }
+  updateInfo() { return this.call<ServerUpdate>('GET', '/api/admin/update'); }
+  startUpdate() { return this.call<{ ok: true }>('POST', '/api/admin/update'); }
   importUrl(url: string) { return this.call<{ recipe: RecipeInput }>('POST', '/api/import', { url }); }
 }

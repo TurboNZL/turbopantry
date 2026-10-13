@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { createApp } from '../src/app.ts';
-import { addUser, openDb } from '../src/db.ts';
+import { addUser, listUsers, openDb } from '../src/db.ts';
+import { Updater } from '../src/update.ts';
 
 let server: Server, base: string, token: string;
 
@@ -130,5 +131,59 @@ describe('recipes api', () => {
       expect(res.status).toBe(422);
       expect(await res.json()).toMatchObject({ code: 'blocked' });
     } finally { await new Promise((r) => real.close(r)); }
+  });
+});
+
+describe('admin and self-update', () => {
+  async function withApp(updaterScript: string | null, fn: (base: string, owner: string, member: string) => Promise<void>) {
+    const db = openDb(':memory:');
+    const owner = addUser(db, 'Owner'), member = addUser(db, 'Member');
+    const updater = updaterScript ? new Updater({ script: updaterScript, restart: false }) : undefined;
+    const app = createApp({ db, updater });
+    await new Promise<void>((r) => app.listen(0, '127.0.0.1', r));
+    try { await fn(`http://127.0.0.1:${(app.address() as AddressInfo).port}`, owner, member); } finally { await new Promise((r) => app.close(r)); }
+  }
+  const h = (t: string) => ({ authorization: `Bearer ${t}` });
+
+  it('only the first account is the owner', async () => {
+    const db = openDb(':memory:'); addUser(db, 'A'); addUser(db, 'B');
+    expect(listUsers(db).map((u) => [u.name, u.isAdmin])).toEqual([['A', true], ['B', false]]);
+  });
+  it('says the server cannot update itself when no updater is configured', () => withApp(null, async (base, owner) => {
+    expect(await (await fetch(`${base}/api/admin/update`, { headers: h(owner) })).json()).toMatchObject({ available: false });
+    expect((await fetch(`${base}/api/admin/update`, { method: 'POST', headers: h(owner) })).status).toBe(404);
+  }));
+  it('keeps the update to the owner', () => withApp(null, async (base, _o, member) => {
+    expect((await fetch(`${base}/api/admin/update`, { headers: h(member) })).status).toBe(403);
+    expect((await fetch(`${base}/api/admin/update`, { method: 'POST', headers: h(member) })).status).toBe(403);
+    expect((await fetch(`${base}/api/admin/update`)).status).toBe(401);
+  }));
+  it('runs the script, reports its output, and refuses a second start while running', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tp-upd-'));
+    mkdirSync(join(dir, 'scripts'));
+    const script = join(dir, 'scripts', 'update.sh');
+    writeFileSync(script, '#!/usr/bin/env bash\necho "step one"\nsleep 1\necho "step two"\n');
+    await withApp(script, async (base, owner) => {
+      expect(await (await fetch(`${base}/api/admin/update`, { headers: h(owner) })).json()).toMatchObject({ available: true, status: 'idle' });
+      expect((await fetch(`${base}/api/admin/update`, { method: 'POST', headers: h(owner) })).status).toBe(202);
+      expect((await fetch(`${base}/api/admin/update`, { method: 'POST', headers: h(owner) })).status).toBe(409);
+      let s: { status: string; log: string[] } = { status: 'running', log: [] };
+      for (let i = 0; i < 40 && s.status === 'running'; i++) { await new Promise((r) => setTimeout(r, 100)); s = await (await fetch(`${base}/api/admin/update`, { headers: h(owner) })).json() as typeof s; }
+      expect(s.status).toBe('done');
+      expect(s.log).toEqual(['step one', 'step two']);
+    });
+  });
+  it('reports a failing script as an error', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tp-upd-'));
+    mkdirSync(join(dir, 'scripts'));
+    const script = join(dir, 'scripts', 'update.sh');
+    writeFileSync(script, '#!/usr/bin/env bash\necho "boom"\nexit 3\n');
+    await withApp(script, async (base, owner) => {
+      await fetch(`${base}/api/admin/update`, { method: 'POST', headers: h(owner) });
+      let s: { status: string; log: string[] } = { status: 'running', log: [] };
+      for (let i = 0; i < 40 && s.status === 'running'; i++) { await new Promise((r) => setTimeout(r, 100)); s = await (await fetch(`${base}/api/admin/update`, { headers: h(owner) })).json() as typeof s; }
+      expect(s.status).toBe('error');
+      expect(s.log.join('\n')).toContain('stopped with code 3');
+    });
   });
 });

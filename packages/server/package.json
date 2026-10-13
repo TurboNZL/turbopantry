@@ -1,14 +1,20 @@
 {
   "name": "@turbopantry/server",
   "version": "0.0.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/index.ts",
     "test": "vitest run",
-    "typecheck": "tsc -p .",
-    "bundle": "node scripts/bundle.mjs"
+    "typecheck": "tsc -p ."
   },
-  "dependencies": { "@turbopantry/shared": "workspace:*" },
-  "devDependencies": { "@types/node": "^22.10.0", "esbuild": "^0.25.0", "typescript": "^5.9.0", "vitest": "^3.0.0" }
+  "dependencies": {
+    "@turbopantry/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.0.0"
+  }
 }

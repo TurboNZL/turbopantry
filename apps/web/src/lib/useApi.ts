@@ -6,7 +6,9 @@ import { useStore } from './store.ts';
 export function useApi(): Api {
   const serverUrl = useStore((s) => s.settings.serverUrl);
   const token = useStore((s) => s.settings.token);
-  return useMemo(() => new Api({ serverUrl, token }), [serverUrl, token]);
+  const cfAccessId = useStore((s) => s.settings.cfAccessId);
+  const cfAccessSecret = useStore((s) => s.settings.cfAccessSecret);
+  return useMemo(() => new Api({ serverUrl, token, cfAccessId, cfAccessSecret }), [serverUrl, token, cfAccessId, cfAccessSecret]);
 }
 
 export interface Loaded<T> { data: T | null; error: Error | null; loading: boolean; reload(): void }

@@ -12,11 +12,14 @@ export interface DeviceSettings {
   /** '' = the server that served this page (the normal case); otherwise the address of another server (the Android app). */
   serverUrl: string;
   token: string;
+  /** Cloudflare Access service token (cloudflare-access module): sent on every request when the server sits behind Access. */
+  cfAccessId: string;
+  cfAccessSecret: string;
 }
 
 export const DEFAULT_SETTINGS: DeviceSettings = {
   theme: 'auto', ui: 'auto', layout: 'side', glass: 'regular', wallpaper: false, wallpaperCustom: false, wallpaperDarkness: 0.35,
-  themeUpdates: true, themesToken: '', serverUrl: '', token: '',
+  themeUpdates: true, themesToken: '', serverUrl: '', token: '', cfAccessId: '', cfAccessSecret: '',
 };
 
 const KEY = 'turbopantry.settings';

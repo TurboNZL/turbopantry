@@ -1,19 +1,24 @@
 {
   "engine": {
     "repo": "TurboNZL/turboengine",
-    "ref": "6b26f2431b58ea2f1d4cdd196d3860b86b2f736c"
+    "ref": "378766815264ca91db67a0ec487dcd1a4648971a"
   },
   "modules": [
     "release-pipeline",
     "appearance",
     "guides-and-docs",
-    "settings-shell"
+    "settings-shell",
+    "self-hosted-server",
+    "cloudflare-access",
+    "server-install-update"
   ],
   "themes": "on",
   "moved": {},
-  "notes": "Modules in: release-pipeline (adapted: no Electron, server tarball + Docker image instead), appearance, guides-and-docs, settings-shell (tab strip + Section only; pairing code not yet). NOT yet copied: updaters and android-shell (they arrive with apps/android; their files still carry Curator names and get renamed to TurboPantry/turbopantry then). Skipped on purpose: editions, window-frame, the Electron half of updaters. Naming: TurboPantry in docs/UI, turbopantry in repo, package and file names.",
+  "notes": "Pinned to the engine after its 2026-10-13 update (self-hosted-server mandatory set). In: release-pipeline (only the release job: the server installs from git and is not a release asset; the APK job joins with Android), appearance, guides-and-docs, settings-shell (tab strip + Section), server-install-update (scripts/install-pi.sh and update.sh renamed to TurboPantry, no ffmpeg/yt-dlp; update.ts verbatim; ServerUpdate.tsx via a useApi hook; first account is the owner and the only one who may update), cloudflare-access (the header helper in lib/api.ts and the Settings fields; accessMedia.ts and sse.ts arrive with live list sync, the Android AccessProxy with Android). Planned with the Android app: updaters, android-shell, device-pairing, termux-server. Skipped on purpose: editions, window-frame, gpu-modes, discord-presence (no Electron). The turbothemes dependency stays pinned at engine commit 6b26f24: its dist and engine have not changed since. Naming: TurboPantry in docs/UI, turbopantry in repo, package and file names.",
   "planned": [
     "updaters",
-    "android-shell"
+    "android-shell",
+    "device-pairing",
+    "termux-server"
   ]
 }

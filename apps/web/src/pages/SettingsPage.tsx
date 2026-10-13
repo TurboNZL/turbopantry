@@ -3,6 +3,7 @@ import { AppearanceLayout, WallpaperCard } from '../components/AppearanceCard.ts
 import { GuidesTab } from '../components/GuidesTab.tsx';
 import { Section } from '../components/Section.tsx';
 import { ServerCard } from '../components/ServerCard.tsx';
+import { ServerUpdateCard } from '../components/ServerUpdate.tsx';
 import { ThemeUpdates } from '../components/ThemeUpdates.tsx';
 import { cn } from '../lib/cn.ts';
 
@@ -26,7 +27,7 @@ export function SettingsPage() {
         <Section title="Wallpaper"><WallpaperCard /></Section>
         <ThemeUpdates />
       </>}
-      {tab === 'server' && <ServerCard />}
+      {tab === 'server' && <><ServerUpdateCard /><ServerCard /></>}
       {tab === 'guides' && <GuidesTab />}
     </div>
   );

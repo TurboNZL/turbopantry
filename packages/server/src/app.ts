@@ -2,14 +2,13 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { existsSync, statSync, createReadStream } from 'node:fs';
 import { extname, join, normalize, sep } from 'node:path';
 import { APP_NAME, type Health, type Status } from '@turbopantry/shared';
-import { countUsers, userForToken, type Db } from './db.ts';
+import { countUsers, userForToken, type Db, type User } from './db.ts';
 import { countRecipes, createRecipe, deleteRecipe, getRecipe, listRecipes, updateRecipe, validateRecipe } from './recipes.ts';
 import { importFromUrl } from './import/index.ts';
+import type { Updater } from './update.ts';
 import type { PageFetcher } from './import/safeFetch.ts';
 import { safeFetchPage } from './import/safeFetch.ts';
 
-declare const __APP_VERSION__: string | undefined;
-export const VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
@@ -26,7 +25,7 @@ function bearer(req: IncomingMessage): string | null {
   return m?.[1] ?? null;
 }
 
-export interface AppOptions { db: Db; webDir?: string; /** How pages are fetched for import. Tests pass a fake; the default refuses private addresses. */ fetchPage?: PageFetcher }
+export interface AppOptions { db: Db; webDir?: string; /** How pages are fetched for import. Tests pass a fake; the default refuses private addresses. */ fetchPage?: PageFetcher; /** Present only when this server can update itself (see update.ts and index.ts). */ updater?: Updater; /** Shown by /api/health. index.ts reads it from git (the newest tag, e.g. v2026.10.3). */ version?: string }
 
 const MAX_BODY = 1024 * 1024;
 class HttpError extends Error {
@@ -41,7 +40,7 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
 }
 
 /** The whole HTTP surface. Every /api route except /api/health needs a token: the server is meant to sit behind a public tunnel. */
-export function createApp({ db, webDir, fetchPage = safeFetchPage }: AppOptions): Server {
+export function createApp({ db, webDir, fetchPage = safeFetchPage, updater, version = 'dev' }: AppOptions): Server {
   return createServer((req, res) => {
     handle(req, res).catch((e) => {
       if (e instanceof HttpError) return json(res, e.status, { error: e.message });
@@ -55,7 +54,7 @@ export function createApp({ db, webDir, fetchPage = safeFetchPage }: AppOptions)
     const path = url.pathname;
 
     if (path === '/api/health' && req.method === 'GET') {
-      return json(res, 200, { ok: true, name: APP_NAME, version: VERSION } satisfies Health);
+      return json(res, 200, { ok: true, name: APP_NAME, version } satisfies Health);
     }
     if (path.startsWith('/api/')) {
       const token = bearer(req);
@@ -64,14 +63,24 @@ export function createApp({ db, webDir, fetchPage = safeFetchPage }: AppOptions)
       if (path === '/api/status' && req.method === 'GET') {
         return json(res, 200, { user: user.name, users: countUsers(db), recipes: countRecipes(db), lists: 0 } satisfies Status);
       }
-      return api(path, url, req, res, user.name);
+      return api(path, url, req, res, user);
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'Method not allowed' });
     return serveWeb(path, req, res);
   }
 
-  async function api(path: string, url: URL, req: IncomingMessage, res: ServerResponse, userName: string) {
+  async function api(path: string, url: URL, req: IncomingMessage, res: ServerResponse, user: User) {
     const m = req.method ?? 'GET';
+    const userName = user.name;
+    if (path === '/api/admin/update') {
+      if (!user.isAdmin) return json(res, 403, { error: 'Only the owner (the first account) can update the server.' });
+      if (m === 'GET') return json(res, 200, { available: !!updater?.available, restarts: !!updater?.restarts, ...(updater?.state() ?? { status: 'idle', log: [], startedAt: null, restarting: false }) });
+      if (m === 'POST') {
+        if (!updater?.available) return json(res, 404, { error: 'This server cannot update itself.' });
+        return updater.start() ? json(res, 202, { ok: true }) : json(res, 409, { error: 'An update is already running.' });
+      }
+      return json(res, 405, { error: 'Method not allowed' });
+    }
     if (path === '/api/recipes') {
       if (m === 'GET') return json(res, 200, listRecipes(db, url.searchParams.get('q') ?? ''));
       if (m === 'POST') {
