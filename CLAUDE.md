@@ -26,12 +26,33 @@ This app is pinned to TurboNZL/turboengine (see `.turboengine.json`; `docs/devel
 | Instagram import | Osta's real method is not public. User confirmed: Osta does NOT watch the video; it reads the caption AND the comments. So: caption + comments -> heuristic parser, free. Video transcription/OCR is a later, optional step. Fetching the caption without a login is NOT verified: Instagram blocks anonymous scraping and yt-dlp usually needs cookies. The sandbox cannot reach Instagram, so this must be proven on the user's own server before the design is locked. Always keep paste-the-caption and share-from-Instagram as the fallback that cannot break. |
 
 ## Repo layout
-Not scaffolded yet (only docs and the engine pin exist). Planned: pnpm monorepo like Curator (`apps/web`, `apps/android`, `packages/server`, `packages/shared`).
+pnpm monorepo (pnpm 10, Node 22.13+). Names are `@turbopantry/*`.
+```
+apps/web/              React 19 + Vite + Tailwind 3 + turbothemes. src/lib (appearance, settings, store, api, guides, markdown), src/components (Layout, AppearanceCard, ThemeUpdates, GuidesTab, ServerCard, Section, Select), src/pages (Recipes, Shopping: empty shells; Settings)
+packages/server/       node:http + node:sqlite. src/app.ts (routes, static web client), src/db.ts (migrations, users/tokens), src/index.ts (env config, `add-user` command), scripts/bundle.mjs -> dist/server.mjs (one file)
+packages/shared/       types shared by both (Health, Status)
+docs/guides/           user guides, bundled into Settings > Guides
+docs/development/      ENGINE.md (which engine modules are in), APPEARANCE.md (from the engine)
+.github/workflows/     auto-pr.yml (PR for every pushed branch), check.yml (push to main), release.yml (push to main: tag vYYYY.M.N, server tarball, Docker image)
+Dockerfile             runs the release folder (server.mjs + web/); data in /data
+```
+Not there yet: `apps/android` (and the `updaters` + `android-shell` engine modules), recipes, importers, shopping lists.
 
 ## What exists and is tested
-Nothing yet.
+- Server: `/api/health` (public), `/api/status` (token), unknown `/api/*` 404, SPA fallback, immutable caching for `/assets/*`, no path escape, accounts with hashed tokens and an `add-user` command. 8 tests (`packages/server/test`).
+- Web: shell with 4 layouts, theme picker + wallpaper + theme updates, Server card (sign in, tested against a real server), in-app guides, markdown renderer (3 tests).
+- Verified in a real run (bundle from `pnpm build` served by `node server.mjs`, Chromium via Playwright): pages load with no console errors, token sign-in shows "Signed in as", layout choice survives a reload, no sideways scroll at 390 px wide.
+- NOT verified: the GitHub workflows (cannot run here), the Docker image (no Docker in the sandbox), anything Android, a Cloudflare tunnel.
 
 ## Hard-won gotchas
+- The engine's web files do not compile under `noUncheckedIndexedAccess` (markdown.ts etc.): leave it off (`tsconfig.base.json`). Worth a line in the engine's `guides-and-docs` MODULE.md.
+- `test` in `vite.config.ts` needs `defineConfig` from `vitest/config`, not `vite`.
+- `pnpm add "github:TurboNZL/turboengine#path:/themes"` writes a codeload.github.com tarball (pinned to a commit) into the lockfile, so CI installs it over HTTPS with no SSH. It works because turboengine is public.
+- The `Check` workflow runs on pushes to main only (engine convention), and `Release` runs in parallel with it, so a broken main still releases. Deliberate engine behaviour; revisit if it bites.
+- `pnpm install --ignore-scripts` is fine: esbuild ships its binary as an optional dependency.
+- Screenshots taken right after navigation catch the page-enter fade and look washed out; wait about 1 s.
+- Do not `pkill -f server.mjs` from the same shell command line: the pattern matches the shell itself.
 
 ## Session log
 - 2026-10-13: Read turboengine, researched Osta/AnyList, got the decisions above from the user. Repo was empty; added engine pin, CLAUDE.md, PROJECT_BRIEF.md. Next: scaffold the monorepo, then prove the Instagram caption fetch from a network that can reach Instagram.
+- 2026-10-13 (2): Created `main` (docs only). Scaffolded the monorepo on the working branch following the engine: workflows (auto-pr, check, release), server + web shell, appearance/guides/settings modules copied and renamed, user guides, Dockerfile. The release ships a server tarball and a GHCR image instead of the engine's Electron installers (no Electron). Nothing to port back to the engine yet. Deviations from the module files: the Curator-only layout `toolbar`, the player CSS and the music-specific Layout/preview markup were removed; the theme group title was renamed.

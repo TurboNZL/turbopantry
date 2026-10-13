@@ -1,0 +1,18 @@
+# Checks on every push to main only (other branches are not built): typecheck, tests and the build of the web client and the server bundle.
+# The Android compile job joins when apps/android exists (turboengine release-pipeline module).
+name: Check
+on:
+  push:
+    branches: [main]
+jobs:
+  ts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
