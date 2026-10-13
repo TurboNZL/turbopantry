@@ -1,4 +1,4 @@
-# Turbopantry: project brief
+# TurboPantry: project brief
 
 The long-lived "why and what". `CLAUDE.md` is the running log; this file changes rarely.
 
@@ -7,7 +7,7 @@ A self-hosted recipe box and shared shopping list for a few people (one househol
 
 ## Feature inventory
 Recipes (from Osta):
-- Import by URL: websites (schema.org/Recipe) and Instagram posts/reels (caption, plus top comments where the caption has no recipe).
+- Import by URL: websites (schema.org/Recipe), Instagram posts/reels (caption and comments, as Osta does) and Osta share pages (`ostarecipes.com/recipes/<id>`, needs a headless-browser render).
 - Import by pasting text, and by Android share-sheet (share a link or caption straight into the app).
 - Clean cooking view (no clutter), folders/collections, shared across accounts.
 - Edit, scale servings, tags, photo.
