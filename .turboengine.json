@@ -1,0 +1,7 @@
+{
+  "engine": { "repo": "TurboNZL/turboengine", "ref": "6b26f2431b58ea2f1d4cdd196d3860b86b2f736c" },
+  "modules": ["release-pipeline", "updaters", "appearance", "guides-and-docs", "settings-shell", "android-shell"],
+  "themes": "on",
+  "moved": {},
+  "notes": "Modules are pinned but NOT yet copied in: the files still carry Curator names (apps/android/.../musiccurator, curator:* IPC, CUR1- pair code) and get renamed to turbopantry as each module is integrated. Electron modules (editions, window-frame) and the Electron half of updaters are deliberately skipped: clients are web/PWA + Android shell only."
+}
