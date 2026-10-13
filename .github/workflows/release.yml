@@ -1,0 +1,68 @@
+# Every merge to main builds the server bundle and the Docker image and publishes them as a new release. Nothing to tag by hand.
+# The version is the year, the month and a counter: v2026.10.0, v2026.10.1, ... (the counter restarts each month).
+# Documentation-only changes do not release. "Run workflow" in the Actions tab releases the current main on demand.
+# The Android APK job (turboengine release-pipeline module) joins when apps/android exists.
+name: Release
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
+  workflow_dispatch:
+permissions:
+  contents: write
+  packages: write
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Work out the next version
+        id: next
+        run: |
+          prefix="v$(date -u +%Y.%-m)."
+          last=$(git tag -l "${prefix}*" | sed "s/^${prefix}//" | sort -n | tail -1)
+          tag="${prefix}$(( ${last:--1} + 1 ))"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Releasing $tag"
+      - name: Create the release (this also creates the tag)
+        run: gh release create "${{ steps.next.outputs.tag }}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "${{ steps.next.outputs.tag }}" --generate-notes
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+
+  server:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Set the version from the tag
+        run: npm pkg set version="$(echo '${{ needs.release.outputs.tag }}' | sed 's/^v//')"
+      - run: pnpm build
+      - name: Assemble the release folder
+        run: |
+          mkdir -p release
+          cp packages/server/dist/server.mjs release/
+          cp -r apps/web/dist release/web
+      - name: Attach the server bundle (lowercase name: turbopantry-server-<version>-node.tar.gz)
+        run: |
+          TAG='${{ needs.release.outputs.tag }}'
+          tar -czf "turbopantry-server-${TAG#v}-node.tar.gz" -C release .
+          gh release upload "$TAG" "turbopantry-server-${TAG#v}-node.tar.gz" --clobber
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}' }
+      - name: Build and push the Docker image (ghcr.io/<owner>/turbopantry:<version> and :latest)
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+          TAG='${{ needs.release.outputs.tag }}'
+          docker build -t "$IMAGE:${TAG#v}" -t "$IMAGE:latest" --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" .
+          docker push "$IMAGE:${TAG#v}"
+          docker push "$IMAGE:latest"

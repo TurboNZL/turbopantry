@@ -1,7 +1,19 @@
 {
-  "engine": { "repo": "TurboNZL/turboengine", "ref": "6b26f2431b58ea2f1d4cdd196d3860b86b2f736c" },
-  "modules": ["release-pipeline", "updaters", "appearance", "guides-and-docs", "settings-shell", "android-shell"],
+  "engine": {
+    "repo": "TurboNZL/turboengine",
+    "ref": "6b26f2431b58ea2f1d4cdd196d3860b86b2f736c"
+  },
+  "modules": [
+    "release-pipeline",
+    "appearance",
+    "guides-and-docs",
+    "settings-shell"
+  ],
   "themes": "on",
   "moved": {},
-  "notes": "Modules are pinned but NOT yet copied in: the files still carry Curator names (apps/android/.../musiccurator, curator:* IPC, CUR1- pair code) and get renamed to TurboPantry (turbopantry in package and file names) as each module is integrated. Electron modules (editions, window-frame) and the Electron half of updaters are deliberately skipped: clients are web/PWA + Android shell only."
+  "notes": "Modules in: release-pipeline (adapted: no Electron, server tarball + Docker image instead), appearance, guides-and-docs, settings-shell (tab strip + Section only; pairing code not yet). NOT yet copied: updaters and android-shell (they arrive with apps/android; their files still carry Curator names and get renamed to TurboPantry/turbopantry then). Skipped on purpose: editions, window-frame, the Electron half of updaters. Naming: TurboPantry in docs/UI, turbopantry in repo, package and file names.",
+  "planned": [
+    "updaters",
+    "android-shell"
+  ]
 }
