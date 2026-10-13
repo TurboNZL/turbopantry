@@ -19,6 +19,7 @@ This app is pinned to TurboNZL/turboengine (see `.turboengine.json`; `docs/devel
 | Cost | Must be free to run: no paid API anywhere in the default path. A paid/keyed LLM may only ever be an optional add-on. |
 | Clients | Web/PWA first, then the engine's Android shell (WebView, share-sheet target, self-update). No Electron. |
 | Users | A few accounts on one server (not multi-household SaaS). Exposed through a Cloudflare tunnel, so real auth on every request, HTTPS assumed, WebSocket/SSE must survive the tunnel. |
+| Install | The Node tarball (`turbopantry-server-<version>-node.tar.gz`, run with `node server.mjs`, systemd unit in the guide) is the primary install. The user dislikes Docker: the image is an OPTIONAL extra, built in its own release job so it can never block a release, and documented last. Do not make Docker the default in docs or code. |
 | Repo | turbonzl/turbopantry, pinned to turboengine (`.turboengine.json`). |
 | Website import | schema.org/Recipe JSON-LD first (covers most recipe sites, no LLM), then microdata, then a readability/heuristic fallback. |
 | Osta share pages | Also import `ostarecipes.com/recipes/<id>` links (the user's example used `/s/recipes/<id>`; the saved page is `/recipes/<id>`, so `/s/` presumably redirects: unverified). INSPECTED a saved copy (fixture `packages/server/test/fixtures/osta-share-page.html`, from the user's .mht): it is a client-rendered React/MUI single-page app on Firebase. There is NO JSON-LD and the og: tags are generic site ones, so a plain HTTP fetch returns an empty shell and a JSON-LD parser finds nothing. The rendered DOM has title, creator, prep/cook time, servings, the cover image (Firebase Storage) and the ingredient list (quantity+unit span, then name, then a note in parentheses, with section headings such as "Cheese sauce"). The saved page showed NO method/steps ("View in the Osta app"), so imports from it are ingredients-only unless steps turn up. Plan: render with a headless browser (Playwright/Chromium, self-hosted, free) and read the DOM; class names are generated (`css-xxxx`), so select by structure/text, not class. Not verified: whether the app's Firestore data can be read directly (do not rely on it), and how it behaves for private recipes. |
@@ -34,7 +35,7 @@ packages/shared/       types shared by both (Health, Status)
 docs/guides/           user guides, bundled into Settings > Guides
 docs/development/      ENGINE.md (which engine modules are in), APPEARANCE.md (from the engine)
 .github/workflows/     auto-pr.yml (PR for every pushed branch), check.yml (push to main), release.yml (push to main: tag vYYYY.M.N, server tarball, Docker image)
-Dockerfile             runs the release folder (server.mjs + web/); data in /data
+Dockerfile             optional install path: runs the release folder (server.mjs + web/); data in /data
 ```
 Not there yet: `apps/android` (and the `updaters` + `android-shell` engine modules), recipes, importers, shopping lists.
 
@@ -56,3 +57,4 @@ Not there yet: `apps/android` (and the `updaters` + `android-shell` engine modul
 ## Session log
 - 2026-10-13: Read turboengine, researched Osta/AnyList, got the decisions above from the user. Repo was empty; added engine pin, CLAUDE.md, PROJECT_BRIEF.md. Next: scaffold the monorepo, then prove the Instagram caption fetch from a network that can reach Instagram.
 - 2026-10-13 (2): Created `main` (docs only). Scaffolded the monorepo on the working branch following the engine: workflows (auto-pr, check, release), server + web shell, appearance/guides/settings modules copied and renamed, user guides, Dockerfile. The release ships a server tarball and a GHCR image instead of the engine's Electron installers (no Electron). Nothing to port back to the engine yet. Deviations from the module files: the Curator-only layout `toolbar`, the player CSS and the music-specific Layout/preview markup were removed; the theme group title was renamed.
+- 2026-10-13 (3): User does not like Docker. Made it optional: release.yml has the Docker image in its own `docker` job, README and SELF_HOSTING lead with the Node tarball plus a systemd unit, Docker is the last section.

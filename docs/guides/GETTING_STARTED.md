@@ -3,7 +3,7 @@
 TurboPantry keeps your recipes and a shopping list you can share with the people you live with. It runs on a computer you own (a home server, a Raspberry Pi, a NAS) and you open it in a browser or on your phone.
 
 ## 1. Start a server
-Follow [SELF_HOSTING.md](SELF_HOSTING.md): it is one Docker command, or a single Node file if you do not use Docker.
+Follow [SELF_HOSTING.md](SELF_HOSTING.md): it is a single Node file you unpack and run (Docker is available as an option).
 
 ## 2. Make an account for each person
 On the server, run `add-user` once per person. It prints that person's access token a single time; only a fingerprint of it is stored, so a lost token means making a new account name or asking the owner to reset it.
