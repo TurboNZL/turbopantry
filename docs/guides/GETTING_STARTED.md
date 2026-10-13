@@ -18,4 +18,4 @@ Open the server's address. Go to **Settings → Server**, paste the token, press
 **Recipes → Import from a link** (see [IMPORTING.md](IMPORTING.md)), or **Write one**. Open a recipe to change the number of servings: the quantities scale with it.
 
 ## What is not here yet
-Shopping lists, importing from Instagram and from Osta links. The Shopping page exists but is empty. This guide will grow as they land.
+Shopping lists and importing from Instagram. The Shopping page exists but is empty. This guide will grow as they land.

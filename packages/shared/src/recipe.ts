@@ -46,5 +46,8 @@ export interface RecipeSummary {
   updatedAt: string;
 }
 
-export type ImportErrorCode = 'bad-url' | 'blocked' | 'fetch-failed' | 'not-html' | 'no-recipe' | 'unsupported';
+export type ImportErrorCode = 'bad-url' | 'blocked' | 'fetch-failed' | 'not-html' | 'no-recipe' | 'unsupported' | 'no-browser';
 export interface ImportError { error: string; code: ImportErrorCode }
+
+/** A successful import: a draft to review, plus things the user should know about it ("this source has no method"). */
+export interface ImportDraft { recipe: RecipeInput; warnings: string[] }

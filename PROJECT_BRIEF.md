@@ -7,7 +7,7 @@ A self-hosted recipe box and shared shopping list for a few people (one househol
 
 ## Feature inventory
 Recipes (from Osta):
-- Import by URL: websites (schema.org/Recipe), Instagram posts/reels (caption and comments, as Osta does) and Osta share pages (`ostarecipes.com/recipes/<id>`, needs a headless-browser render).
+- Import by URL: websites (schema.org/Recipe), Osta share pages (`ostarecipes.com/recipes/<id>`, rendered in a headless browser; ingredients only) and Instagram posts/reels (caption and comments, as Osta does; not built yet).
 - Import by pasting text, and by Android share-sheet (share a link or caption straight into the app).
 - Clean cooking view (no clutter), folders/collections, shared across accounts.
 - Edit, scale servings, tags, photo.

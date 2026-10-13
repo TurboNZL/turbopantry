@@ -8,7 +8,7 @@
 set -euo pipefail
 
 USER_NAME="turbopantry"; DATA_DIR=""; PORT="47900"; REPO="https://github.com/TurboNZL/turbopantry.git"; BRANCH="main"; ADMIN_NAME="admin"
-DRY=0; YES=0
+DRY=0; YES=0; BROWSER=1
 
 usage() { cat <<USAGE
 Usage: install-pi.sh [options]
@@ -18,6 +18,7 @@ Usage: install-pi.sh [options]
   --user NAME       the system user that runs the server (default $USER_NAME)
   --repo URL        where to download TurboPantry from (default $REPO)
   --branch NAME     branch to install (default $BRANCH)
+  --no-browser      do not install Chromium (it is only used to read Osta links; about 300 MB)
   --admin NAME      name of the first (owner) account, made only if there are no accounts yet (default $ADMIN_NAME)
   --dry-run         print what would be done, change nothing
   --yes             do not ask questions
@@ -30,6 +31,7 @@ while [ $# -gt 0 ]; do
     --user) USER_NAME="${2:?--user needs a name}"; shift 2 ;;
     --repo) REPO="${2:?--repo needs a URL}"; shift 2 ;;
     --branch) BRANCH="${2:?--branch needs a name}"; shift 2 ;;
+    --no-browser) BROWSER=0; shift ;;
     --admin) ADMIN_NAME="${2:?--admin needs a name}"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
     --yes|-y) YES=1; shift ;;
@@ -75,9 +77,15 @@ if on_system_disk; then
   fi
 fi
 
-say "1/7 System packages (git, curl)"
+say "1/7 System packages (git, curl, and Chromium for Osta links)"
 run apt-get update -y
 run env DEBIAN_FRONTEND=noninteractive apt-get install -y git curl ca-certificates xz-utils
+if [ "$BROWSER" = 0 ]; then note "skipping Chromium (--no-browser): Osta links will say the server has no browser"; else
+  # Debian and Raspberry Pi OS ship a real 'chromium' package; Ubuntu has none (its 'chromium-browser' is a snap stub that cannot run as a service), so there this step fails and says so
+  if [ "$DRY" = 1 ]; then run env DEBIAN_FRONTEND=noninteractive apt-get install -y chromium
+  elif env DEBIAN_FRONTEND=noninteractive apt-get install -y chromium && chromium --version >/dev/null 2>&1; then note "Chromium installed: $(chromium --version)"
+  else note "could not install a working Chromium: Osta links will not work until you install one (see docs/guides/SELF_HOSTING.md). Everything else works."; fi
+fi
 
 say "2/7 Node.js 22 (the server needs 22.13 or newer)"
 node_ok() { command -v node >/dev/null 2>&1 && node -e 'const [a,b]=process.versions.node.split(".").map(Number); process.exit(a>22||(a===22&&b>=13)?0:1)'; }

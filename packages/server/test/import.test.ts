@@ -3,9 +3,11 @@ import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { extractFromJsonLd, lenientParse } from '../src/import/jsonld.ts';
+import { isOstaRecipeUrl, parseOstaPage } from '../src/import/osta.ts';
 import { importFromUrl } from '../src/import/index.ts';
 import { FetchError, isBlockedAddress, makeFetcher, safeFetchPage } from '../src/import/safeFetch.ts';
 import { gzipSync } from 'node:zlib';
+import { createBrowserRenderer, findChromium, OSTA_HOSTS } from '../src/import/browser.ts';
 
 const fx = (n: string) => readFileSync(new URL(`./fixtures/${n}`, import.meta.url), 'utf8');
 
@@ -43,16 +45,18 @@ describe('JSON-LD extraction', () => {
 });
 
 describe('importFromUrl', () => {
-  const page = (name: string) => async (url: string) => ({ url, html: fx(name) });
+  const page = (name: string) => ({ fetchPage: async (url: string) => ({ url, html: fx(name) }) });
   it('returns a draft for a recipe page', async () => expect(await importFromUrl('https://example.com/mac', page('recipe-yoast-graph.html'))).toHaveProperty('recipe.title', 'Honey BBQ Mac & Cheese'));
   it('says so when there is no recipe', async () => expect(await importFromUrl('https://example.com/x', page('no-recipe.html'))).toMatchObject({ code: 'no-recipe' }));
   it('passes fetch errors through as codes', async () => {
-    const boom = async () => { throw new FetchError('blocked', 'nope'); };
+    const boom = { fetchPage: async () => { throw new FetchError('blocked', 'nope'); } };
     expect(await importFromUrl('https://example.com/x', boom)).toEqual({ code: 'blocked', error: 'nope' });
   });
-  it('is honest about Instagram and Osta not being built yet', async () => {
+  it('is honest about Instagram not being built yet', async () => {
     expect(await importFromUrl('https://www.instagram.com/p/abc/', page('recipe-yoast-graph.html'))).toMatchObject({ code: 'unsupported' });
-    expect(await importFromUrl('https://ostarecipes.com/s/recipes/abc', page('recipe-yoast-graph.html'))).toMatchObject({ code: 'unsupported' });
+  });
+  it('warns when a website page has no method', async () => {
+    expect(await importFromUrl('https://example.com/x', { fetchPage: async (url) => ({ url, html: fx('recipe-yoast-graph.html').replace(/"recipeInstructions":\[[\s\S]*?\]\}\]\}/, '"x":1}]}') }) })).toMatchObject({ warnings: [expect.stringContaining('No method')] });
   });
 });
 
@@ -109,4 +113,125 @@ describe('fetching (against a local server, guard off)', () => {
       await expect(fetcher(`${s.url}/big`)).rejects.toMatchObject({ code: 'fetch-failed', message: expect.stringContaining('too large') });
     } finally { await s.close(); }
   });
+});
+
+describe('Osta share pages', () => {
+  const html = fx('osta-share-page.html');
+  const draft = parseOstaPage(html, 'https://ostarecipes.com/s/recipes/bKmcW83bkt1UBWs17gB2')!;
+  const r = draft.recipe;
+
+  it('reads the real saved page', () => expect(draft).toBeTruthy());
+  it('title, creator, times, servings, description, photo, source', () => {
+    expect(r.title).toBe('Honey Bbq Mac N Cheese');
+    expect(r.sourceName).toBe('Osta (thegoldenbalance)');
+    expect([r.prepMinutes, r.cookMinutes, r.totalMinutes, r.servings]).toEqual([30, 45, 75, 8]);
+    expect(r.description).toBe('My favorite Mac N Cheese Recipe To Date');
+    expect(r.imageUrl).toContain('/o/recipes%2FbKmcW83bkt1UBWs17gB2');
+    expect(r.sourceUrl).toBe('https://ostarecipes.com/s/recipes/bKmcW83bkt1UBWs17gB2');
+  });
+  it('reads all 28 ingredient lines and not the "View in the Osta app" button', () => {
+    expect(r.ingredients).toHaveLength(28);
+    expect(r.ingredients.some((i) => /osta app/i.test(i.raw))).toBe(false);
+  });
+  it('keeps the section headings in order', () => {
+    expect([...new Set(r.ingredients.map((i) => i.section))]).toEqual([null, 'Cheese sauce', 'For Layering', 'Chicken', 'Honey Bbq sauce']);
+  });
+  it('splits quantity, unit, name and note', () => {
+    const by = (name: string) => r.ingredients.filter((i) => i.name === name);
+    expect(by('pasta')[0]).toMatchObject({ quantity: 24, unit: 'oz', note: 'large elbow macaroni', section: null });
+    expect(by('sharp cheddar')[0]).toMatchObject({ quantity: 8, quantityMax: 12, unit: 'oz', note: 'adjust based off thickness', section: 'Cheese sauce' });
+    expect(by('flour')[0]).toMatchObject({ quantity: 1.5, unit: 'cup' });
+    expect(by('honey')[0]).toMatchObject({ quantity: 0.25, unit: 'tbsp' });
+    expect(by('chicken thighs')[0]).toMatchObject({ quantity: 2, unit: 'lb', note: 'cubed', section: 'Chicken' });
+    expect(r.ingredients.find((i) => i.name === 'Salt')).toMatchObject({ quantity: null, note: 'to taste' });
+    expect(r.ingredients.at(-1)).toMatchObject({ quantity: 3, section: 'Honey Bbq sauce', note: 'cut into small' }); // "3 Tosp cold butter": the author's typo is kept, not guessed at
+  });
+  it('says the page has no method', () => { expect(r.steps).toEqual([]); expect(draft.warnings.join(' ')).toContain('not the method'); });
+  it('returns null for a page that is not a recipe (still loading, private, other site)', () => {
+    expect(parseOstaPage('<html><body><p class="MuiTypography-root MuiTypography-h1">Osta</p></body></html>', 'https://ostarecipes.com/recipes/x')).toBeNull();
+    expect(parseOstaPage(fx('no-recipe.html'), 'https://ostarecipes.com/recipes/x')).toBeNull();
+  });
+  it.each([['https://ostarecipes.com/s/recipes/bKmcW83bkt1UBWs17gB2', true], ['https://ostarecipes.com/recipes/abc', true], ['https://www.ostarecipes.com/recipes/abc/', true],
+    ['https://ostarecipes.com/creators/explore', false], ['https://ostarecipes.com/', false], ['https://evilostarecipes.com/recipes/abc', false], ['https://ostarecipes.com.evil.com/recipes/abc', false]])('recognises %s -> %s', (u, ok) => expect(isOstaRecipeUrl(u)).toBe(ok));
+
+  describe('through importFromUrl', () => {
+    it('renders the link and returns the draft', async () => {
+      const seen: string[] = [];
+      const render = async (url: string) => { seen.push(url); return { url, html }; };
+      const res = await importFromUrl('https://ostarecipes.com/s/recipes/bKmcW83bkt1UBWs17gB2', { render });
+      expect(res).toHaveProperty('recipe.title', 'Honey Bbq Mac N Cheese');
+      expect(seen).toEqual(['https://ostarecipes.com/s/recipes/bKmcW83bkt1UBWs17gB2']);
+    });
+    it('tries the other form of the link when the first shows nothing', async () => {
+      const seen: string[] = [];
+      const render = async (url: string) => { seen.push(url); return { url, html: url.includes('/s/') ? '<html></html>' : html }; };
+      expect(await importFromUrl('https://ostarecipes.com/s/recipes/abc', { render })).toHaveProperty('recipe.title');
+      expect(seen).toEqual(['https://ostarecipes.com/s/recipes/abc', 'https://ostarecipes.com/recipes/abc']);
+    });
+    it('says so when there is no browser, nothing shows, or the link is not a recipe', async () => {
+      expect(await importFromUrl('https://ostarecipes.com/recipes/abc', {})).toMatchObject({ code: 'no-browser' });
+      expect(await importFromUrl('https://ostarecipes.com/recipes/abc', { render: async (url) => ({ url, html: '<html></html>' }) })).toMatchObject({ code: 'no-recipe' });
+      expect(await importFromUrl('https://ostarecipes.com/recipes/abc', { render: async () => { throw new FetchError('fetch-failed', 'timed out'); } })).toMatchObject({ code: 'fetch-failed' });
+      expect(await importFromUrl('https://ostarecipes.com/creators/explore', { render: async (url) => ({ url, html }) })).toMatchObject({ code: 'unsupported' });
+    });
+    it('reports a missing browser as no-browser, not as a crash', async () => {
+      expect(await importFromUrl('https://ostarecipes.com/recipes/abc', { render: async () => { throw new FetchError('no-browser', 'none'); } })).toMatchObject({ code: 'no-browser' });
+    });
+  });
+});
+
+// These start a real Chromium (the one on this machine); where there is none they are skipped, and CLAUDE.md says so.
+describe.skipIf(!findChromium())('headless renderer (real Chromium, local test pages)', () => {
+  const localOnly = (host: string) => host === '127.0.0.1';
+  const render = createBrowserRenderer({ allowHost: localOnly, noSandbox: true });
+
+  async function site(handler: Parameters<typeof createServer>[1]) {
+    const srv = createServer(handler);
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r));
+    return { url: `http://127.0.0.1:${(srv.address() as AddressInfo).port}`, port: (srv.address() as AddressInfo).port, close: () => new Promise((r) => srv.close(r)) };
+  }
+
+  it('waits for a JavaScript-only page to render, then returns the finished HTML', async () => {
+    const s = await site((q, res) => {
+      if (q.url === '/data.json') { setTimeout(() => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"t":"Ingredients"}'); }, 300); return; }
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end('<html><body><div id="root"></div><script>fetch("/data.json").then(r=>r.json()).then(d=>{document.getElementById("root").innerHTML="<p>"+d.t+"</p><p>24 ozs pasta</p>"})</script></body></html>');
+    });
+    try { const out = await render(`${s.url}/recipes/abc`, { readyText: 'Ingredients', timeoutMs: 8000 }); expect(out.html).toContain('24 ozs pasta'); } finally { await s.close(); }
+  });
+  it('gives up with a clear error when the text never appears', async () => {
+    const s = await site((_q, res) => { res.writeHead(200, { 'content-type': 'text/html' }); res.end('<html><body><p>Not found</p></body></html>'); });
+    try { await expect(render(s.url, { readyText: 'Ingredients', timeoutMs: 1500 })).rejects.toMatchObject({ code: 'fetch-failed' }); } finally { await s.close(); }
+  });
+  it('never lets the page reach a host that is not on the allow-list', async () => {
+    let evilHits = 0;
+    const evil = await site((_q, res) => { evilHits++; res.writeHead(200, { 'access-control-allow-origin': '*' }); res.end('x'); });
+    // "localhost" is not 127.0.0.1 by name, so the allow-list refuses it even though it is the same machine
+    const s = await site((_q, res) => { res.writeHead(200, { 'content-type': 'text/html' }); res.end(`<html><body><p>Ingredients</p><script>fetch("http://localhost:${evil.port}/steal").catch(()=>{}); new Image().src="http://localhost:${evil.port}/pixel"; var f=document.createElement("iframe"); f.src="http://localhost:${evil.port}/frame"; document.body.appendChild(f);</script></body></html>`); });
+    try { await render(s.url, { readyText: 'Ingredients', timeoutMs: 8000 }); await new Promise((r) => setTimeout(r, 500)); expect(evilHits).toBe(0); } finally { await s.close(); await evil.close(); }
+  });
+  it('does not load images', async () => {
+    let imageHits = 0;
+    const s = await site((q, res) => {
+      if (q.url === '/pic.png') { imageHits++; res.writeHead(200, { 'content-type': 'image/png' }); res.end('x'); return; }
+      res.writeHead(200, { 'content-type': 'text/html' }); res.end('<html><body><p>Ingredients</p><img src="/pic.png"></body></html>');
+    });
+    try { const out = await render(s.url, { readyText: 'Ingredients', timeoutMs: 8000 }); await new Promise((r) => setTimeout(r, 300)); expect(imageHits).toBe(0); expect(out.html).toContain('/pic.png'); } finally { await s.close(); }
+  });
+  it('renders one page at a time', async () => {
+    let active = 0, peak = 0;
+    const s = await site((_q, res) => { active++; peak = Math.max(peak, active); setTimeout(() => { active--; res.writeHead(200, { 'content-type': 'text/html' }); res.end('<html><body><p>Ingredients</p></body></html>'); }, 400); });
+    try { await Promise.all([1, 2, 3].map(() => render(s.url, { readyText: 'Ingredients', timeoutMs: 8000 }))); expect(peak).toBe(1); } finally { await s.close(); }
+  });
+  it('says so when no browser can be started', async () => {
+    const none = createBrowserRenderer({ executablePath: null });
+    await expect(none('https://example.com', { readyText: 'x' })).rejects.toMatchObject({ code: 'no-browser' });
+    const bad = createBrowserRenderer({ executablePath: '/nonexistent/chrome' });
+    await expect(bad('https://example.com', { readyText: 'x' })).rejects.toMatchObject({ code: 'no-browser' });
+  });
+});
+
+describe('OSTA_HOSTS allow-list', () => {
+  it.each(['ostarecipes.com', 'www.ostarecipes.com', 'firestore.googleapis.com', 'firebasestorage.googleapis.com', 'www.gstatic.com'])('allows %s', (h) => expect(OSTA_HOSTS(h)).toBe(true));
+  it.each(['evil.com', 'ostarecipes.com.evil.com', 'notostarecipes.com', 'localhost', '127.0.0.1', '169.254.169.254', 'googleapis.com.evil.io'])('refuses %s', (h) => expect(OSTA_HOSTS(h)).toBe(false));
 });

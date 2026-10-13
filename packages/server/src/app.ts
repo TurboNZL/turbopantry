@@ -8,6 +8,7 @@ import { importFromUrl } from './import/index.ts';
 import type { Updater } from './update.ts';
 import type { PageFetcher } from './import/safeFetch.ts';
 import { safeFetchPage } from './import/safeFetch.ts';
+import type { PageRenderer } from './import/browser.ts';
 
 
 const TYPES: Record<string, string> = {
@@ -25,7 +26,7 @@ function bearer(req: IncomingMessage): string | null {
   return m?.[1] ?? null;
 }
 
-export interface AppOptions { db: Db; webDir?: string; /** How pages are fetched for import. Tests pass a fake; the default refuses private addresses. */ fetchPage?: PageFetcher; /** Present only when this server can update itself (see update.ts and index.ts). */ updater?: Updater; /** Shown by /api/health. index.ts reads it from git (the newest tag, e.g. v2026.10.3). */ version?: string }
+export interface AppOptions { db: Db; webDir?: string; /** How pages are fetched for import. Tests pass a fake; the default refuses private addresses. */ fetchPage?: PageFetcher; /** Renders JavaScript-only pages (Osta links). index.ts passes the real headless browser; tests pass a fake. */ render?: PageRenderer; /** Present only when this server can update itself (see update.ts and index.ts). */ updater?: Updater; /** Shown by /api/health. index.ts reads it from git (the newest tag, e.g. v2026.10.3). */ version?: string }
 
 const MAX_BODY = 1024 * 1024;
 class HttpError extends Error {
@@ -40,7 +41,7 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
 }
 
 /** The whole HTTP surface. Every /api route except /api/health needs a token: the server is meant to sit behind a public tunnel. */
-export function createApp({ db, webDir, fetchPage = safeFetchPage, updater, version = 'dev' }: AppOptions): Server {
+export function createApp({ db, webDir, fetchPage = safeFetchPage, render, updater, version = 'dev' }: AppOptions): Server {
   return createServer((req, res) => {
     handle(req, res).catch((e) => {
       if (e instanceof HttpError) return json(res, e.status, { error: e.message });
@@ -105,7 +106,7 @@ export function createApp({ db, webDir, fetchPage = safeFetchPage, updater, vers
     if (path === '/api/import' && m === 'POST') {
       const body = await readJson(req) as { url?: unknown };
       if (typeof body?.url !== 'string' || !body.url.trim()) return json(res, 400, { error: 'Send {"url": "https://..."}', code: 'bad-url' });
-      const result = await importFromUrl(body.url.trim(), fetchPage);
+      const result = await importFromUrl(body.url.trim(), { fetchPage, render });
       return 'recipe' in result ? json(res, 200, result) : json(res, 422, result);
     }
     return json(res, 404, { error: 'Not found' });

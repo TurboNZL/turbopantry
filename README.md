@@ -1,14 +1,14 @@
 # TurboPantry
 
-A self-hosted recipe box and shared shopping list. Import recipes from websites (Instagram and Osta links are next), keep them in one place, and add a recipe's ingredients to a shopping list that stays in sync between the people who share it.
+A self-hosted recipe box and shared shopping list. Import recipes from websites (Osta links work; Instagram is next), keep them in one place, and add a recipe's ingredients to a shopping list that stays in sync between the people who share it.
 
 ## Features
 - Recipes: write, edit, search (title, tags, ingredient names), scale servings, tick ingredients off.
-- Import from recipe websites (schema.org recipe data); you review the draft before it is saved.
+- Import from recipe websites (schema.org recipe data) and Osta share links (ingredients only: Osta's pages have no method); you review the draft before it is saved.
 - A few accounts on one server, each with its own token; built to sit behind a Cloudflare Tunnel (Cloudflare Access service tokens supported).
 - Themes, UI styles and layouts from turbothemes; guides inside the app (Settings → Guides).
 - Free to run: nothing needs a paid service.
-- Coming: shopping lists with live sync, Osta link and Instagram import, an Android app.
+- Coming: shopping lists with live sync, Instagram import, an Android app.
 
 ## Running it
 **A home server (Linux or a Raspberry Pi), one command:**
