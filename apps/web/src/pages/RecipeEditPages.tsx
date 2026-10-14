@@ -58,12 +58,13 @@ export function ImportPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<RecipeInput | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const { busy: saving, error: saveError, submit } = useSave((r) => api.createRecipe(r));
 
   async function fetchDraft(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true); setError(null); setDraft(null);
-    try { setDraft((await api.importUrl(url.trim())).recipe); }
+    setBusy(true); setError(null); setDraft(null); setWarnings([]);
+    try { const d = await api.importUrl(url.trim()); setDraft(d.recipe); setWarnings(d.warnings); }
     catch (err) { setError(err instanceof ApiError ? (err.status === 401 ? 'Sign in first (Settings → Server).' : err.message) : EXPLAIN.unsupported!); }
     finally { setBusy(false); }
   }
@@ -72,15 +73,16 @@ export function ImportPage() {
     <div className="mx-auto max-w-2xl space-y-4">
       <h1 className="text-2xl font-bold">Import from a link</h1>
       <form onSubmit={(e) => void fetchDraft(e)} className="flex gap-2">
-        <input className="input flex-1" type="url" required placeholder="https://… a recipe page" aria-label="Recipe address" value={url} onChange={(e) => setUrl(e.target.value)} autoFocus />
+        <input className="input flex-1" type="url" required placeholder="https://… a recipe page or an Osta link" aria-label="Recipe address" value={url} onChange={(e) => setUrl(e.target.value)} autoFocus />
         <button className="btn btn-accent" disabled={busy || !url.trim()}>{busy ? 'Reading…' : 'Import'}</button>
       </form>
-      <p className="text-sm text-muted">Works with most recipe websites. You can check and fix everything before it is saved.</p>
+      <p className="text-sm text-muted">Works with most recipe websites and Osta share links. You can check and fix everything before it is saved.</p>
       {error && <p className="text-sm text-bad" role="alert">{error}</p>}
       {saveError && <p className="text-sm text-bad" role="alert">{saveError}</p>}
       {draft && (
         <div className="space-y-3">
           <div className="card p-3 text-sm">Found <strong>{draft.title || 'a recipe'}</strong> with {draft.ingredients.length} ingredients and {draft.steps.length} steps. Check it, then save.</div>
+          {warnings.map((w) => <p key={w} className="rounded-theme bg-warn/15 p-3 text-sm" role="status">{w}</p>)}
           <RecipeForm initial={draft} submitLabel="Save recipe" busy={saving} onSubmit={(r) => void submit(r)} />
         </div>
       )}

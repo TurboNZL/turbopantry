@@ -1,4 +1,4 @@
-import type { Health, ImportError, Recipe, RecipeInput, RecipeSummary, ServerUpdate, Status } from '@turbopantry/shared';
+import type { Health, ImportDraft, ImportError, Recipe, RecipeInput, RecipeSummary, ServerUpdate, Status } from '@turbopantry/shared';
 
 export interface ApiConfig { serverUrl: string; token: string; cfAccessId?: string; cfAccessSecret?: string }
 
@@ -34,5 +34,5 @@ export class Api {
   deleteRecipe(id: number) { return this.call<{ ok: true }>('DELETE', `/api/recipes/${id}`); }
   updateInfo() { return this.call<ServerUpdate>('GET', '/api/admin/update'); }
   startUpdate() { return this.call<{ ok: true }>('POST', '/api/admin/update'); }
-  importUrl(url: string) { return this.call<{ recipe: RecipeInput }>('POST', '/api/import', { url }); }
+  importUrl(url: string) { return this.call<ImportDraft>('POST', '/api/import', { url }); }
 }

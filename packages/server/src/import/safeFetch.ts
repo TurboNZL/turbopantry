@@ -11,7 +11,7 @@ import { createBrotliDecompress, createGunzip, createInflate } from 'node:zlib';
  * addresses are refused; redirects are followed by hand and each hop is checked again; time and size are capped.
  */
 export class FetchError extends Error {
-  code: 'bad-url' | 'blocked' | 'fetch-failed' | 'not-html';
+  code: 'bad-url' | 'blocked' | 'fetch-failed' | 'not-html' | 'no-browser';
   constructor(code: FetchError['code'], message: string) { super(message); this.code = code; }
 }
 

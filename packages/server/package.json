@@ -10,7 +10,9 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@turbopantry/shared": "workspace:*"
+    "@turbopantry/shared": "workspace:*",
+    "node-html-parser": "^9.0.4",
+    "playwright-core": "^1.64.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

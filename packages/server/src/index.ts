@@ -5,10 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { createApp } from './app.ts';
 import { addUser, listUsers, openDb } from './db.ts';
 import { Updater } from './update.ts';
+import { createBrowserRenderer } from './import/browser.ts';
 
 /**
  * Configuration is by environment variable (systemd, a plain shell and the installer all do that):
  *   TURBOPANTRY_PORT (47900)   TURBOPANTRY_HOST (0.0.0.0)   TURBOPANTRY_DATA (./data)   TURBOPANTRY_WEB (the web client's folder; found in the checkout by default)
+ *   TURBOPANTRY_CHROMIUM  path of the browser used for Osta links (default: chromium / google-chrome on the PATH)   TURBOPANTRY_BROWSER_NO_SANDBOX=1 if it will not start
  *   TURBOPANTRY_UPDATE  0 turns the in-app "Update server" button off, 1 offers it even without systemd
  * Accounts (run from packages/server, with the same TURBOPANTRY_DATA as the service):
  *   node --experimental-strip-types src/index.ts add-user <name>   makes an account and prints its token once; the first one is the owner
@@ -46,6 +48,6 @@ const updater = offered ? new Updater({ script, restart: underSystemd, exit: () 
 const version = gitVersion();
 const port = Number(process.env.TURBOPANTRY_PORT ?? 47900);
 const host = process.env.TURBOPANTRY_HOST ?? '0.0.0.0';
-createApp({ db, webDir, updater, version }).listen(port, host, () => {
+createApp({ db, webDir, updater, version, render: createBrowserRenderer() }).listen(port, host, () => {
   console.log(`TurboPantry ${version} on http://${host}:${port}  data: ${dataDir}  web: ${webDir ?? 'not found (API only)'}  self-update: ${updater ? 'on' : 'off'}`);
 });
