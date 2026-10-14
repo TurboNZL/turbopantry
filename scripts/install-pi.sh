@@ -155,7 +155,8 @@ if node_ok; then note "found $(node -v), keeping it"; else
     note "installed $(node -v)"
   fi
 fi
-if command -v pnpm >/dev/null 2>&1; then note "pnpm $(pnpm -v) found"; else
+# pnpm must actually run (a leftover corepack stub on the PATH is not enough) and be on a path the service user can see
+if (cd / && pnpm -v) >/dev/null 2>&1; then note "pnpm $(cd / && pnpm -v) found"; else
   run npm install -g pnpm@10
   if [ "$DRY" = 0 ]; then pnpm_bin="$(dirname "$(readlink -f "$(command -v node)")")/pnpm"; [ -e "$pnpm_bin" ] && ln -sf "$pnpm_bin" /usr/local/bin/pnpm; fi
 fi
