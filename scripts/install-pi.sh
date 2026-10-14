@@ -46,11 +46,14 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# the installer never depends on where it was started from: the service user often cannot read that folder (for example your home)
+cd /
+
 say()  { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 note() { printf '    %s\n' "$*"; }
 die()  { printf '\n\033[31mStopped: %s\033[0m\n' "$*" >&2; exit 1; }
 run()  { if [ "$DRY" = 1 ]; then printf '    [dry run] %s\n' "$*"; else "$@"; fi; }
-as_user() { if [ "$DRY" = 1 ]; then printf '    [dry run] as %s: %s\n' "$USER_NAME" "$*"; else sudo -u "$USER_NAME" -H bash -c "$*"; fi; }
+as_user() { if [ "$DRY" = 1 ]; then printf '    [dry run] as %s: %s\n' "$USER_NAME" "$*"; else sudo -u "$USER_NAME" -H bash -c "cd / && $*"; fi; }  # cd /: the service user may not be able to read the folder you started from (pnpm scans it)
 
 if [ "$DRY" = 0 ] && [ "$(id -u)" -ne 0 ]; then die "run this as root: sudo ./scripts/install-pi.sh (or put sudo before bash in the one-line command)"; fi
 [ "$(uname -s)" = "Linux" ] || die "this installer is for Linux (a Raspberry Pi, or a Debian/Ubuntu machine)."
@@ -222,9 +225,9 @@ if [ "$DRY" = 1 ]; then note "[dry run] wait for http://127.0.0.1:$PORT/api/heal
   ok=0; for _ in $(seq 1 40); do if curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then ok=1; break; fi; sleep 1; done
   [ "$ok" = 1 ] || die "the server did not start. Look at: journalctl -u turbopantry -n 50"
   CLI="cd '$APP_DIR/packages/server' && TURBOPANTRY_DATA='$DATA_DIR' '$NODE_PATH_BIN' --experimental-strip-types --disable-warning=ExperimentalWarning src/index.ts"
-  EXISTING="$(sudo -u "$USER_NAME" -H bash -c "$CLI users" 2>/dev/null || true)"
+  EXISTING="$(sudo -u "$USER_NAME" -H bash -c "cd / && $CLI users" 2>/dev/null || true)"
   TOKEN_OUT=""
-  if [ -z "$EXISTING" ]; then TOKEN_OUT="$(sudo -u "$USER_NAME" -H bash -c "$CLI add-user '$ADMIN_NAME'" 2>&1 | tail -1)"; fi
+  if [ -z "$EXISTING" ]; then TOKEN_OUT="$(sudo -u "$USER_NAME" -H bash -c "cd / && $CLI add-user '$ADMIN_NAME'" 2>&1 | tail -1)"; fi
   printf '\n\033[1m\033[32mDone. TurboPantry is running.\033[0m\n\n'
   note "Open it in a browser on any device on your network:"
   for ip in $(hostname -I 2>/dev/null); do case "$ip" in *:*) ;; *) note "    http://$ip:$PORT" ;; esac; done
