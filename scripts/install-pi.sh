@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
 # Install the TurboPantry server on a Raspberry Pi (or any Debian/Ubuntu Linux machine), start it, and print how to connect.
 #
-#   curl -fsSL https://raw.githubusercontent.com/TurboNZL/turbopantry/main/scripts/install-pi.sh | sudo bash -s -- --data-dir /var/lib/turbopantry
+#   curl -fsSL https://raw.githubusercontent.com/TurboNZL/turbopantry/main/scripts/install-pi.sh | sudo bash -s -- --install-dir /mnt/data/turbopantry
 #   sudo ./scripts/install-pi.sh --help
 #
-# Safe to run again: it updates what is there. Nothing is installed outside the folders and files named in the summary it prints first.
+# Safe to run again: it updates what is there. Everything TurboPantry owns goes in ONE folder (--install-dir, asked for if you do not give it);
+# the summary it prints first names the few things that live outside it (the system user, the systemd unit, the sudoers file, apt packages).
 set -euo pipefail
 
-USER_NAME="turbopantry"; DATA_DIR=""; PORT="47900"; REPO="https://github.com/TurboNZL/turbopantry.git"; BRANCH="main"; ADMIN_NAME="admin"
+USER_NAME="turbopantry"; INSTALL_DIR=""; APP_DIR=""; DATA_DIR=""; PORT="47900"; REPO="https://github.com/TurboNZL/turbopantry.git"; BRANCH="main"; ADMIN_NAME="admin"
 DRY=0; YES=0; BROWSER=1
 
 usage() { cat <<USAGE
 Usage: install-pi.sh [options]
-  --data-dir PATH   where your recipes and lists live (the database). On a Pi, prefer an external drive to the SD card.
-                    Default: /var/lib/turbopantry (that IS the SD card on a Pi, and you will be asked to confirm)
+  --install-dir PATH  the ONE folder TurboPantry lives in, e.g. /mnt/data/turbopantry. It gets app/ (the program), data/ (your recipes and
+                      lists: back this up), home/ (the service user's files) and pnpm-store/. Asked for if you do not give it (default /opt/turbopantry).
+                      It must be new or empty, on a Linux filesystem (ext4, xfs, btrfs...), and not mounted noexec.
+  --data-dir PATH     keep the data somewhere else than <install-dir>/data (rarely needed)
+  --app-dir PATH      keep the program somewhere else than <install-dir>/app (rarely needed)
   --port N          port of the server (default $PORT)
   --user NAME       the system user that runs the server (default $USER_NAME)
   --repo URL        where to download TurboPantry from (default $REPO)
@@ -26,6 +30,8 @@ USAGE
 }
 while [ $# -gt 0 ]; do
   case "$1" in
+    --install-dir) INSTALL_DIR="${2:?--install-dir needs a path}"; shift 2 ;;
+    --app-dir) APP_DIR="${2:?--app-dir needs a path}"; shift 2 ;;
     --data-dir) DATA_DIR="${2:?--data-dir needs a path}"; shift 2 ;;
     --port) PORT="${2:?--port needs a number}"; shift 2 ;;
     --user) USER_NAME="${2:?--user needs a name}"; shift 2 ;;
@@ -57,24 +63,72 @@ case "$(uname -m)" in
   *) die "no build of Node for this processor: $(uname -m)" ;;
 esac
 
-[ -n "$DATA_DIR" ] || DATA_DIR="/var/lib/turbopantry"
-case "$DATA_DIR" in /*) ;; *) die "--data-dir must be a full path starting with /" ;; esac
-HOME_DIR="/home/$USER_NAME"; APP_DIR="$HOME_DIR/turbopantry"
+# ---- where everything goes ----
+# ONE folder holds all of TurboPantry: app/ (the program, a git checkout), data/ (the database: back it up), home/ (the service user's home:
+# caches) and pnpm-store/ (downloaded packages). Pick it BEFORE anything is installed: pass --install-dir, or answer the question below.
+if [ -z "$INSTALL_DIR$APP_DIR$DATA_DIR" ] && [ "$YES" = 0 ] && [ "$DRY" = 0 ] && [ -r /dev/tty ]; then
+  printf '\n\033[1mWhere should TurboPantry live?\033[0m\n' > /dev/tty
+  printf '    One folder holds the program, your data and the service user'"'"'s files, so it can sit on the drive you choose\n    (for example /mnt/data/turbopantry). It must be new or empty.\n' > /dev/tty
+  read -r -p "    Install folder [/opt/turbopantry]: " ans < /dev/tty || ans=""
+  INSTALL_DIR="$ans"
+fi
+[ -n "$INSTALL_DIR" ] || INSTALL_DIR="/opt/turbopantry"
+tidy() { case "$1" in /*) ;; *) die "$2 must be a full path starting with /  (you gave: $1)" ;; esac; realpath -m -- "$1"; }
+INSTALL_DIR="$(tidy "$INSTALL_DIR" "--install-dir")"
+case "$INSTALL_DIR" in /|/bin|/boot|/dev|/etc|/home|/lib|/media|/mnt|/opt|/proc|/root|/run|/sbin|/srv|/sys|/tmp|/usr|/var) die "$INSTALL_DIR is a system folder. Choose a folder of its own inside it, for example $INSTALL_DIR/turbopantry." ;; esac
+APP_DIR="$(tidy "${APP_DIR:-$INSTALL_DIR/app}" "--app-dir")"; DATA_DIR="$(tidy "${DATA_DIR:-$INSTALL_DIR/data}" "--data-dir")"
+HOME_DIR="$INSTALL_DIR/home"; STORE_DIR="$INSTALL_DIR/pnpm-store"
 
-# is the data folder on the same disk as the operating system? (the SD card, on a Pi)
-on_system_disk() {
-  local probe="$DATA_DIR"; while [ ! -e "$probe" ] && [ "$probe" != "/" ]; do probe="$(dirname "$probe")"; done
-  [ "$(stat -c %d "$probe")" = "$(stat -c %d /)" ]
+# an existing folder must be empty or one this installer made before (so it never mixes with other files, e.g. all of /mnt/data)
+if [ -e "$INSTALL_DIR" ]; then
+  [ -d "$INSTALL_DIR" ] || die "$INSTALL_DIR exists and is not a folder."
+  if [ ! -e "$INSTALL_DIR/.turbopantry-install" ] && [ -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
+    die "$INSTALL_DIR already has other files in it. Choose a new or empty folder (for example $INSTALL_DIR/turbopantry), so TurboPantry stays in a folder of its own."
+  fi
+fi
+
+nearest_existing() { local p="$1"; while [ ! -e "$p" ] && [ "$p" != "/" ]; do p="$(dirname "$p")"; done; printf '%s' "$p"; }
+# "<mount point> <filesystem type> <mount options>" of the filesystem that holds (or would hold) a path
+mount_of() { findmnt -no TARGET,FSTYPE,OPTIONS -T "$(nearest_existing "$1")" 2>/dev/null | head -1 || true; }
+
+check_place() { # path, what-it-is
+  local path="$1" what="$2" line target fstype opts
+  line="$(mount_of "$path")"
+  if [ -z "$line" ]; then note "(could not read the mount table for $what; skipping the drive checks)"; return 0; fi
+  read -r target fstype opts <<<"$line"
+  case "$fstype" in
+    vfat|exfat|msdos|ntfs|ntfs3) die "$what ($path) would be on a drive formatted as $fstype. TurboPantry needs a Linux filesystem (ext4, xfs, btrfs): this one has no Linux permissions or symlinks, which the build and the database need. Format the drive as ext4, or choose a folder on another drive." ;;
+    fuseblk) note "WARNING: $path is on a FUSE-mounted drive (often NTFS or exFAT via ntfs-3g). That does not work for TurboPantry. If it is really ext4/xfs this is fine; otherwise stop now (Ctrl-C) and use a Linux filesystem." ;;
+  esac
+  if [ "$what" = "the program" ] && printf ',%s,' "$opts" | grep -q ',noexec,'; then
+    die "$path is on a drive mounted with the noexec option ($target), so the build tools cannot run there. Remove noexec from that drive's line in /etc/fstab (then remount), or choose another folder."
+  fi
+  if [ "$target" = "/" ]; then
+    case "$path" in
+      /mnt/*|/media/*)
+        note "WARNING: $path looks like it should be on a separate drive, but nothing is mounted there: it would go on the system disk."
+        if [ "$YES" = 1 ] || [ "$DRY" = 1 ]; then note "(--yes given or dry run: continuing)"; else die "mount the drive first (or check the spelling), then run this again. To install on the system disk anyway, add --yes."; fi ;;
+      *) note "NOTE: $what ($path) is on the system disk. On a Raspberry Pi that is the SD card, which constant writes wear out;"
+         note "for a Pi, plug in a drive, mount it and use --install-dir /mnt/yourdrive/turbopantry." ;;
+    esac
+    SYSTEM_DISK=1
+  fi
 }
 
 say "TurboPantry server"
-note "user: $USER_NAME     app: $APP_DIR     data: $DATA_DIR     port: $PORT"
-if on_system_disk; then
-  note "WARNING: $DATA_DIR is on the same disk as the operating system. On a Raspberry Pi that is the SD card:"
-  note "constant writes wear it out. For a Pi, plug in a drive, mount it, and run this again with --data-dir /mnt/yourdrive/turbopantry."
-  if [ "$YES" = 0 ] && [ "$DRY" = 0 ]; then
-    if [ -r /dev/tty ]; then read -r -p "    Continue anyway? [y/N] " ans < /dev/tty; [[ "$ans" =~ ^[Yy] ]] || die "cancelled. Nothing was changed."; else die "re-run with --yes to accept, or choose --data-dir on another drive."; fi
-  fi
+note "folder:  $INSTALL_DIR"
+note "  app:   $APP_DIR        (the program, downloaded from git)"
+note "  data:  $DATA_DIR       (your recipes and lists: back this up)"
+note "  home:  $HOME_DIR       (the service user's files)"
+note "  store: $STORE_DIR      (downloaded packages)"
+note "user: $USER_NAME     port: $PORT"
+note "Outside that folder this adds only: the system user '$USER_NAME', /etc/systemd/system/turbopantry.service, /etc/sudoers.d/turbopantry,"
+note "apt packages (git, curl, and Chromium for Osta links), and Node 22 and pnpm if the machine has none."
+SYSTEM_DISK=0
+check_place "$APP_DIR" "the program"
+[ "$DATA_DIR" = "$APP_DIR" ] || check_place "$DATA_DIR" "the data"
+if [ "$SYSTEM_DISK" = 1 ] && [ "$YES" = 0 ] && [ "$DRY" = 0 ]; then
+  if [ -r /dev/tty ]; then read -r -p "    Continue anyway? [y/N] " ans < /dev/tty; [[ "$ans" =~ ^[Yy] ]] || die "cancelled. Nothing was changed."; else die "re-run with --yes to accept, or choose --install-dir on another drive."; fi
 fi
 
 say "1/7 System packages (git, curl, and Chromium for Osta links)"
@@ -101,15 +155,27 @@ if node_ok; then note "found $(node -v), keeping it"; else
     note "installed $(node -v)"
   fi
 fi
-if command -v pnpm >/dev/null 2>&1; then note "pnpm $(pnpm -v) found"; else
+# pnpm must actually run (a leftover corepack stub on the PATH is not enough) and be on a path the service user can see
+if (cd / && pnpm -v) >/dev/null 2>&1; then note "pnpm $(cd / && pnpm -v) found"; else
   run npm install -g pnpm@10
   if [ "$DRY" = 0 ]; then pnpm_bin="$(dirname "$(readlink -f "$(command -v node)")")/pnpm"; [ -e "$pnpm_bin" ] && ln -sf "$pnpm_bin" /usr/local/bin/pnpm; fi
 fi
 
-say "3/7 The service user and the data folder"
-if id "$USER_NAME" >/dev/null 2>&1; then note "user $USER_NAME exists"; else run useradd --system --create-home --shell /usr/sbin/nologin "$USER_NAME"; fi
-run mkdir -p "$DATA_DIR"
+say "3/7 The folder, the service user and the data folder"
+run mkdir -p "$INSTALL_DIR" "$APP_DIR" "$DATA_DIR" "$HOME_DIR" "$STORE_DIR"
+run touch "$INSTALL_DIR/.turbopantry-install"
+if id "$USER_NAME" >/dev/null 2>&1; then
+  cur_home="$(getent passwd "$USER_NAME" | cut -d: -f6)"; cur_shell="$(getent passwd "$USER_NAME" | cut -d: -f7)"
+  if [ "$cur_home" = "$HOME_DIR" ]; then note "user $USER_NAME exists"
+  elif [ "$(id -u "$USER_NAME")" -lt 1000 ] && case "$cur_shell" in */nologin|*/false) true ;; *) false ;; esac; then
+    # a system account this installer made earlier (for example before the folder was moved): point its home at the folder
+    note "user $USER_NAME exists with home $cur_home: moving its home to $HOME_DIR"; run usermod -d "$HOME_DIR" "$USER_NAME"
+  else note "user $USER_NAME is an ordinary account (home $cur_home): leaving its home alone; the package store still goes to $STORE_DIR"; fi
+else run useradd --system --home-dir "$HOME_DIR" --shell /usr/sbin/nologin "$USER_NAME"; fi
+run chown "$USER_NAME:$USER_NAME" "$INSTALL_DIR" "$APP_DIR" "$HOME_DIR" "$STORE_DIR"
 run chown -R "$USER_NAME:$USER_NAME" "$DATA_DIR"
+# downloaded packages go to the folder, not to the user's home on the system disk (update.sh and the Update button use the same setting)
+as_user "pnpm config set store-dir '$STORE_DIR' --global"
 
 say "4/7 Downloading TurboPantry"
 if [ -d "$APP_DIR/.git" ]; then as_user "cd '$APP_DIR' && git fetch --depth 1 origin '$BRANCH' && git checkout -q '$BRANCH' && git reset -q --hard FETCH_HEAD"
@@ -120,8 +186,8 @@ as_user "cd '$APP_DIR' && pnpm install --ignore-scripts --filter @turbopantry/sh
 
 say "6/7 The service"
 NODE_PATH_BIN="$(command -v node 2>/dev/null || echo /usr/local/bin/node)"
-MOUNT_LINE=""; case "$DATA_DIR" in /var/lib/*|/home/*) ;; *) MOUNT_LINE="RequiresMountsFor=$DATA_DIR" ;; esac
-if [ "$DRY" = 1 ]; then note "[dry run] write /etc/systemd/system/turbopantry.service (user $USER_NAME, node $NODE_PATH_BIN, data $DATA_DIR, port $PORT)"; else
+MOUNT_LINE="RequiresMountsFor=$APP_DIR $DATA_DIR"  # on a separate drive the service waits for it to be mounted
+if [ "$DRY" = 1 ]; then note "[dry run] write /etc/systemd/system/turbopantry.service (user $USER_NAME, node $NODE_PATH_BIN, program $APP_DIR, data $DATA_DIR, port $PORT)"; else
   cat > /etc/systemd/system/turbopantry.service <<UNIT
 [Unit]
 Description=TurboPantry server
@@ -172,7 +238,8 @@ if [ "$DRY" = 1 ]; then note "[dry run] wait for http://127.0.0.1:$PORT/api/heal
     note "    sudo -u $USER_NAME -H bash -c \"cd $APP_DIR/packages/server && TURBOPANTRY_DATA=$DATA_DIR node --experimental-strip-types src/index.ts add-user NAME\""
   fi
   note ""
-  note "Update later with:  sudo -u $USER_NAME -H $APP_DIR/scripts/update.sh      (or the Update server button in Settings > Server)"
+  note "Update later with:  sudo -u $USER_NAME -H bash $APP_DIR/scripts/update.sh      (or the Update server button in Settings > Server)"
+  note "Everything is in:      $INSTALL_DIR"
   note "Logs:               journalctl -u turbopantry -f"
   note "Next steps:         docs/guides/GETTING_STARTED.md"
 fi

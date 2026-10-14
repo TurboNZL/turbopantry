@@ -13,9 +13,9 @@ A self-hosted recipe box and shared shopping list. Import recipes from websites 
 ## Running it
 **A home server (Linux or a Raspberry Pi), one command:**
 ```
-curl -fsSL https://raw.githubusercontent.com/TurboNZL/turbopantry/main/scripts/install-pi.sh | sudo bash -s -- --data-dir /var/lib/turbopantry
+curl -fsSL https://raw.githubusercontent.com/TurboNZL/turbopantry/main/scripts/install-pi.sh | sudo bash -s -- --install-dir /mnt/data/turbopantry
 ```
-It installs Node, makes a service user, downloads and builds the app, starts it, makes the owner account and prints the address and token. Details, other machines and backups: `docs/guides/SELF_HOSTING.md`.
+Pick the folder with `--install-dir` (or leave it out and the installer asks): the program, your data and the service user's files all go in that one folder. It installs Node if needed, makes a service user, downloads and builds the app, starts it, makes the owner account and prints the address and token. Details, other machines and backups: `docs/guides/SELF_HOSTING.md`.
 
 **To develop:**
 ```
