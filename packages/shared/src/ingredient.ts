@@ -131,8 +131,15 @@ export function formatQuantity(n: number): string {
   return String(Math.round(n * 10) / 10);
 }
 
+const COUNTED: Record<string, string> = { cup: 'cups', clove: 'cloves', can: 'cans', jar: 'jars', package: 'packages', packet: 'packets', bag: 'bags', box: 'boxes', bottle: 'bottles', slice: 'slices', piece: 'pieces', sprig: 'sprigs', bunch: 'bunches', stick: 'sticks', head: 'heads', stalk: 'stalks', handful: 'handfuls', pinch: 'pinches', dash: 'dashes', pint: 'pints', quart: 'quarts', gallon: 'gallons', sheet: 'sheets', fillet: 'fillets', rasher: 'rashers', knob: 'knobs' };
+/** "clove" -> "cloves" when there is more than one; measures such as tsp, g and oz never change. */
+export function unitLabel(unit: string | null, quantity: number | null): string | null {
+  if (!unit || quantity === null || quantity <= 1) return unit;
+  return COUNTED[unit] ?? unit;
+}
+
 export function scaleIngredient(i: Ingredient, factor: number): string {
   if (i.quantity === null) return i.raw;
   const q = formatQuantity(i.quantity * factor) + (i.quantityMax !== null ? `–${formatQuantity(i.quantityMax * factor)}` : '');
-  return [q, i.unit, i.name].filter(Boolean).join(' ') + (i.note ? `, ${i.note}` : '');
+  return [q, unitLabel(i.unit, (i.quantityMax ?? i.quantity) * factor), i.name].filter(Boolean).join(' ') + (i.note ? `, ${i.note}` : '');
 }

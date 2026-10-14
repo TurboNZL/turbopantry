@@ -7,6 +7,8 @@ export interface DeviceSettings {
   wallpaper: boolean;
   wallpaperCustom: boolean;
   wallpaperDarkness: number;
+  /** Recipes: show the amounts (in the ingredient list and inside the method). Off = names only. */
+  showQuantities: boolean;
   themeUpdates: boolean;
   themesToken: string;
   /** '' = the server that served this page (the normal case); otherwise the address of another server (the Android app). */
@@ -19,7 +21,7 @@ export interface DeviceSettings {
 
 export const DEFAULT_SETTINGS: DeviceSettings = {
   theme: 'auto', ui: 'auto', layout: 'side', glass: 'regular', wallpaper: false, wallpaperCustom: false, wallpaperDarkness: 0.35,
-  themeUpdates: true, themesToken: '', serverUrl: '', token: '', cfAccessId: '', cfAccessSecret: '',
+  showQuantities: true, themeUpdates: true, themesToken: '', serverUrl: '', token: '', cfAccessId: '', cfAccessSecret: '',
 };
 
 const KEY = 'turbopantry.settings';

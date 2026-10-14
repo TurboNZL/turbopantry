@@ -59,12 +59,13 @@ export function ImportPage() {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<RecipeInput | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [alternative, setAlternative] = useState<{ url: string; label: string } | null>(null);
   const { busy: saving, error: saveError, submit } = useSave((r) => api.createRecipe(r));
 
-  async function fetchDraft(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true); setError(null); setDraft(null); setWarnings([]);
-    try { const d = await api.importUrl(url.trim()); setDraft(d.recipe); setWarnings(d.warnings); }
+  async function fetchDraft(e?: React.FormEvent, address = url) {
+    e?.preventDefault();
+    setBusy(true); setError(null); setDraft(null); setWarnings([]); setAlternative(null);
+    try { const d = await api.importUrl(address.trim()); setDraft(d.recipe); setWarnings(d.warnings); setAlternative(d.alternative ?? null); }
     catch (err) { setError(err instanceof ApiError ? (err.status === 401 ? 'Sign in first (Settings → Server).' : err.message) : EXPLAIN.unsupported!); }
     finally { setBusy(false); }
   }
@@ -83,6 +84,7 @@ export function ImportPage() {
         <div className="space-y-3">
           <div className="card p-3 text-sm">Found <strong>{draft.title || 'a recipe'}</strong> with {draft.ingredients.length} ingredients and {draft.steps.length} steps. Check it, then save.</div>
           {warnings.map((w) => <p key={w} className="rounded-theme bg-warn/15 p-3 text-sm" role="status">{w}</p>)}
+          {alternative && <button type="button" className="btn btn-accent" disabled={busy} onClick={() => { setUrl(alternative.url); void fetchDraft(undefined, alternative.url); }}>Import from {alternative.label} instead</button>}
           <RecipeForm initial={draft} submitLabel="Save recipe" busy={saving} onSubmit={(r) => void submit(r)} />
         </div>
       )}

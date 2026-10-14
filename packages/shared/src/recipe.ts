@@ -50,4 +50,9 @@ export type ImportErrorCode = 'bad-url' | 'blocked' | 'fetch-failed' | 'not-html
 export interface ImportError { error: string; code: ImportErrorCode }
 
 /** A successful import: a draft to review, plus things the user should know about it ("this source has no method"). */
-export interface ImportDraft { recipe: RecipeInput; warnings: string[] }
+export interface ImportDraft {
+  recipe: RecipeInput;
+  warnings: string[];
+  /** Another address the same recipe can be imported from, probably with cleaner data (an Osta recipe that links to the site it came from). */
+  alternative?: { url: string; label: string };
+}

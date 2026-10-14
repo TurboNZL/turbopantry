@@ -1,14 +1,23 @@
 {
   "name": "TurboPantry",
   "emblem": "jar",
-  "accent": null,
+  "emblemColor": "#3ddc97",
   "out": {
     "svg": "apps/web/public/icon.svg",
     "mono": "apps/web/public/icon-mono.svg",
     "png": [
-      ["apps/web/public/icon-512.png", 512],
-      ["apps/web/public/icon-192.png", 192],
-      ["apps/web/public/favicon-32.png", 32]
+      [
+        "apps/web/public/icon-512.png",
+        512
+      ],
+      [
+        "apps/web/public/icon-192.png",
+        192
+      ],
+      [
+        "apps/web/public/favicon-32.png",
+        32
+      ]
     ]
   }
 }

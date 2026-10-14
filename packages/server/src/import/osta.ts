@@ -17,7 +17,7 @@ const has = (n: HTMLElement, cls: string) => (n.getAttribute('class') ?? '').spl
 const ps = (root: HTMLElement, cls: string) => root.querySelectorAll('p').filter((p) => has(p, cls));
 const clean = (s: string) => s.replace(/\s+/g, ' ').trim();
 
-export interface OstaDraft { recipe: RecipeInput; warnings: string[] }
+export interface OstaDraft { recipe: RecipeInput; warnings: string[]; alternative?: { url: string; label: string } }
 
 /** Reads a rendered Osta recipe page. Returns null when the page does not look like a recipe (private, deleted, still loading, markup changed). */
 export function parseOstaPage(html: string, pageUrl: string): OstaDraft | null {
@@ -50,8 +50,15 @@ export function parseOstaPage(html: string, pageUrl: string): OstaDraft | null {
 
   const body1 = ps(root, 'MuiTypography-body1').map((p) => clean(p.text));
   const timeOf = (label: string) => { const t = body1.find((b) => new RegExp(`^${label}\\s*:`, 'i').test(b)); return t ? parseMinutes(t.replace(/^[^:]*:\s*/, '')) : null; };
-  const prep = timeOf('prep'), cook = timeOf('cook');
-  const description = body1.find((b) => b && !/^(prep|cook)\s*:/i.test(b)) ?? '';
+  const prep = timeOf('prep') || null, cook = timeOf('cook') || null; // "0 min" means not given
+  let description = body1.find((b) => b && !/^(prep|cook)\s*:/i.test(b)) ?? '';
+  // Osta recipes copied from a website carry that website's address in the description: lift it out, it is a better place to import from
+  let alternative: OstaDraft['alternative'];
+  const link = /https?:\/\/[^\s)<>"']+/.exec(description);
+  if (link) {
+    description = clean(description.replace(link[0], ''));
+    try { const u = new URL(link[0].replace(/[.,;]+$/, '')); if (!isOstaUrl(u.toString()) && !/(^|\.)instagram\.com$/.test(u.hostname)) alternative = { url: u.toString(), label: u.hostname.replace(/^www\./, '') }; } catch { /* not a usable address: just drop it from the description */ }
+  }
   const servings = parseServings(ps(root, 'MuiTypography-h5').map((p) => clean(p.text)).find((t) => /^\d+(\.\d+)?\s*servings?$/i.test(t)));
   const imgs = root.querySelectorAll('img');
   const photo = imgs.find((i) => /\/o\/recipes(%2F|\/)/.test(i.getAttribute('src') ?? ''))?.getAttribute('src') ?? null;
@@ -64,6 +71,9 @@ export function parseOstaPage(html: string, pageUrl: string): OstaDraft | null {
       servings, prepMinutes: prep, cookMinutes: cook, totalMinutes: prep !== null && cook !== null ? prep + cook : null,
       ingredients: items, steps: [], tags: [], notes: '',
     },
-    warnings: ['Osta share pages show the ingredients but not the method. Add the method yourself (the original video or post is the best source).'],
+    warnings: [alternative
+      ? `This recipe came from ${alternative.label}. Importing from there is usually cleaner and includes the method.`
+      : 'No method was found on this Osta page. Add it yourself in the Method box (the original video or post is the best source).'],
+    ...(alternative ? { alternative } : {}),
   };
 }

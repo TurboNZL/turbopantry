@@ -15,7 +15,7 @@ Open the server's address. Go to **Settings → Server**, paste the token, press
 **Settings → Appearance** has many colour themes and UI styles, four layouts (side bar, icon rail, top tabs, bottom dock) and an optional wallpaper. Your choices stay on this device.
 
 ## 5. Add your first recipe
-**Recipes → Import from a link** (see [IMPORTING.md](IMPORTING.md)), or **Write one**. Open a recipe to change the number of servings: the quantities scale with it.
+**Recipes → Import from a link** (see [IMPORTING.md](IMPORTING.md)), or **Write one**. Open a recipe to change the number of servings: the quantities scale with it. Amounts are in bold, the ingredients are bold inside the method, and **Amounts on/off** hides every quantity (in the list and in the method) when you just want to see what goes in.
 
 ## What is not here yet
 Shopping lists and importing from Instagram. The Shopping page exists but is empty. This guide will grow as they land.
