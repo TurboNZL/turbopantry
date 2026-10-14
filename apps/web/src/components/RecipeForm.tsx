@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ingredientsToBlock, parseIngredientBlock, parseMinutes, parseServings, type RecipeInput } from '@turbopantry/shared';
+import { cleanSteps, ingredientsToBlock, parseIngredientBlock, parseMinutes, parseServings, type RecipeInput } from '@turbopantry/shared';
 
 export const EMPTY_RECIPE: RecipeInput = {
   title: '', description: '', imageUrl: null, sourceUrl: null, sourceName: null, servings: null, prepMinutes: null, cookMinutes: null, totalMinutes: null,
@@ -31,7 +31,7 @@ export function RecipeForm({ initial, submitLabel, busy, onSubmit }: { initial: 
       ...initial, title: title.trim(), description: description.trim(), imageUrl: imageUrl.trim() || null,
       servings: servings.trim() ? parseServings(servings) : null, prepMinutes, cookMinutes,
       totalMinutes: initial.totalMinutes !== null && prepMinutes === initial.prepMinutes && cookMinutes === initial.cookMinutes ? initial.totalMinutes : null,
-      ingredients: parseIngredientBlock(ingredients), steps: steps.split(/\n\s*\n|\r?\n/).map((s) => s.trim()).filter(Boolean),
+      ingredients: parseIngredientBlock(ingredients), steps: cleanSteps(steps.split(/\n\s*\n|\r?\n/)), // pasted step numbers and headings ("1", "Directions") are dropped
       tags: tags.split(',').map((t) => t.trim()).filter(Boolean), notes: notes.trim(),
     });
   }
@@ -50,7 +50,7 @@ export function RecipeForm({ initial, submitLabel, busy, onSubmit }: { initial: 
       <label className="block"><span className={label}>Ingredients</span>
         <textarea className="input min-h-[10rem] font-mono text-sm" value={ingredients} onChange={(e) => setIngredients(e.target.value)} placeholder={'1 1/2 cups flour\n2 eggs\n# Sauce\n1 can tomatoes'} />
         <span className="text-xs text-muted">One per line. A line starting with # begins a group, such as “# Sauce”.</span></label>
-      <label className="block"><span className={label}>Method</span><textarea className="input min-h-[10rem]" value={steps} onChange={(e) => setSteps(e.target.value)} placeholder="One step per line or paragraph." /></label>
+      <label className="block"><span className={label}>Method</span><textarea className="input min-h-[10rem]" value={steps} onChange={(e) => setSteps(e.target.value)} placeholder="One step per line or paragraph. Pasted step numbers are cleaned up for you." /></label>
       <label className="block"><span className={label}>Tags <span className="font-normal text-muted">(comma separated)</span></span><input className="input" value={tags} onChange={(e) => setTags(e.target.value)} /></label>
       <label className="block"><span className={label}>Notes</span><textarea className="input min-h-[4rem]" value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
       <button className="btn btn-accent" disabled={busy || !title.trim()}>{busy ? 'Saving…' : submitLabel}</button>

@@ -40,6 +40,11 @@ describe('JSON-LD extraction', () => {
     expect(p.steps).toEqual(['Mix the dry ingredients.', 'Whisk in the milk and egg.', 'Cook on a hot pan.']);
     expect(p.ingredients.map((i) => [i.section, i.name])).toEqual([[null, 'flour'], [null, 'baking powder'], ['Wet ingredients', 'milk'], ['Wet ingredients', 'egg']]);
   });
+  it('drops bare step numbers and headings that some sites put in the method', () => {
+    const odd = fx('recipe-plain-string.html').replace('"1. Mix the dry ingredients.\n2. Whisk in the milk and egg.\n3. Cook on a hot pan."', '"Directions\n1\nMix the dry ingredients.\n2\nWhisk in the milk and egg.\n3\nCook on a hot pan."');
+    expect(odd).not.toBe(fx('recipe-plain-string.html')); // the substitution really happened
+    expect(extractFromJsonLd(odd, 'https://example.com/p')!.steps).toEqual(['Mix the dry ingredients.', 'Whisk in the milk and egg.', 'Cook on a hot pan.']);
+  });
   it('returns null for pages without a recipe', () => expect(extractFromJsonLd(fx('no-recipe.html'), 'https://example.com')).toBeNull());
   it('lenientParse gives up quietly on garbage', () => expect(lenientParse('{nope')).toBeUndefined());
 });
@@ -146,13 +151,31 @@ describe('Osta share pages', () => {
     expect(r.ingredients.find((i) => i.name === 'Salt')).toMatchObject({ quantity: null, note: 'to taste' });
     expect(r.ingredients.at(-1)).toMatchObject({ quantity: 3, section: 'Honey Bbq sauce', note: 'cut into small' }); // "3 Tosp cold butter": the author's typo is kept, not guessed at
   });
-  it('says the page has no method', () => { expect(r.steps).toEqual([]); expect(draft.warnings.join(' ')).toContain('not the method'); });
+  it('says the page has no method', () => { expect(r.steps).toEqual([]); expect(draft.warnings.join(' ')).toContain('No method was found'); expect(draft.alternative).toBeUndefined(); });
   it('returns null for a page that is not a recipe (still loading, private, other site)', () => {
     expect(parseOstaPage('<html><body><p class="MuiTypography-root MuiTypography-h1">Osta</p></body></html>', 'https://ostarecipes.com/recipes/x')).toBeNull();
     expect(parseOstaPage(fx('no-recipe.html'), 'https://ostarecipes.com/recipes/x')).toBeNull();
   });
   it.each([['https://ostarecipes.com/s/recipes/bKmcW83bkt1UBWs17gB2', true], ['https://ostarecipes.com/recipes/abc', true], ['https://www.ostarecipes.com/recipes/abc/', true],
     ['https://ostarecipes.com/creators/explore', false], ['https://ostarecipes.com/', false], ['https://evilostarecipes.com/recipes/abc', false], ['https://ostarecipes.com.evil.com/recipes/abc', false]])('recognises %s -> %s', (u, ok) => expect(isOstaRecipeUrl(u)).toBe(ok));
+
+  describe('an Osta recipe that was copied from a website', () => {
+    // the saved page with a source address in its description and zero prep/cook times, like the carbonara the user imported
+    const copied = html
+      .replace('My favorite Mac N Cheese Recipe To Date', 'Get dinner on the table fast. https://www.taste.com.au/recipes/creamy-fettuccine-carbonara/018c6902-d4bd-43e6-8818-633f3ebb4b9b')
+      .replace('Prep : 30 min', 'Prep : 0 min').replace('Cook : 45 min', 'Cook : 0 min');
+    const d = parseOstaPage(copied, 'https://ostarecipes.com/recipes/x')!;
+    it('lifts the address out of the description and offers it as the place to import from', () => {
+      expect(d.recipe.description).toBe('Get dinner on the table fast.');
+      expect(d.alternative).toEqual({ url: 'https://www.taste.com.au/recipes/creamy-fettuccine-carbonara/018c6902-d4bd-43e6-8818-633f3ebb4b9b', label: 'taste.com.au' });
+      expect(d.warnings.join(' ')).toContain('came from taste.com.au');
+    });
+    it('treats "0 min" as not given', () => expect([d.recipe.prepMinutes, d.recipe.cookMinutes, d.recipe.totalMinutes]).toEqual([null, null, null]));
+    it('does not offer an Instagram or Osta address', () => {
+      expect(parseOstaPage(html.replace('My favorite Mac N Cheese Recipe To Date', 'Made it! https://www.instagram.com/reel/abc/'), 'https://ostarecipes.com/recipes/x')!.alternative).toBeUndefined();
+      expect(parseOstaPage(html.replace('My favorite Mac N Cheese Recipe To Date', 'See https://ostarecipes.com/recipes/other'), 'https://ostarecipes.com/recipes/x')!.alternative).toBeUndefined();
+    });
+  });
 
   describe('through importFromUrl', () => {
     it('renders the link and returns the draft', async () => {

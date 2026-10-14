@@ -1,4 +1,4 @@
-import { parseIngredient, parseMinutes, parseServings, sectionHeading, type Ingredient, type RecipeInput } from '@turbopantry/shared';
+import { cleanSteps, parseIngredient, parseMinutes, parseServings, sectionHeading, type Ingredient, type RecipeInput } from '@turbopantry/shared';
 import { decodeEntities, htmlToText, ldJsonBlocks, metaTags } from './html.ts';
 
 type Json = unknown;
@@ -98,7 +98,7 @@ export function extractFromJsonLd(html: string, pageUrl: string): RecipeInput | 
     cookMinutes: parseMinutes(recipe['cookTime']),
     totalMinutes: parseMinutes(recipe['totalTime']),
     ingredients,
-    steps: steps(recipe['recipeInstructions']),
+    steps: cleanSteps(steps(recipe['recipeInstructions'])),
     tags,
     notes: '',
   };

@@ -34,7 +34,15 @@ describe('ingredient blocks', () => {
 
 describe('quantities', () => {
   it.each([[1.5, '1½'], [1 / 3, '⅓'], [2, '2'], [0.25, '¼'], [2.43, '2.4'], [2.37, '2⅜'], [2.999, '3']])('format %s', (n, s) => expect(formatQuantity(n)).toBe(s));
-  it('scales', () => { expect(scaleIngredient(parseIngredient('1 cup milk, warm'), 2)).toBe('2 cup milk, warm'); expect(scaleIngredient(parseIngredient('Salt'), 3)).toBe('Salt'); expect(scaleIngredient(parseIngredient('2-3 tbsp oil'), 2)).toBe('4–6 tbsp oil'); });
+  it('puts counted units in the plural, and leaves measures alone', () => {
+    expect(scaleIngredient(parseIngredient('2 clove garlic, crushed'), 1)).toBe('2 cloves garlic, crushed');
+    expect(scaleIngredient(parseIngredient('1 clove garlic'), 1)).toBe('1 clove garlic');
+    expect(scaleIngredient(parseIngredient('1 cup milk'), 2)).toBe('2 cups milk');
+    expect(scaleIngredient(parseIngredient('1/2 cup milk'), 1)).toBe('½ cup milk');
+    expect(scaleIngredient(parseIngredient('2 tsp salt'), 1)).toBe('2 tsp salt');
+    expect(scaleIngredient(parseIngredient('1 bunch parsley'), 3)).toBe('3 bunches parsley');
+  });
+  it('scales', () => { expect(scaleIngredient(parseIngredient('1 cup milk, warm'), 2)).toBe('2 cups milk, warm'); expect(scaleIngredient(parseIngredient('Salt'), 3)).toBe('Salt'); expect(scaleIngredient(parseIngredient('2-3 tbsp oil'), 2)).toBe('4–6 tbsp oil'); });
 });
 
 describe('durations and servings', () => {

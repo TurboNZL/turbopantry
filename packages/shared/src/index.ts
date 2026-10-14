@@ -10,3 +10,4 @@ export interface ServerUpdate { available: boolean; restarts: boolean; status: '
 export * from './recipe.ts';
 export * from './ingredient.ts';
 export * from './duration.ts';
+export * from './method.ts';
