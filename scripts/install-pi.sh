@@ -165,7 +165,12 @@ say "3/7 The folder, the service user and the data folder"
 run mkdir -p "$INSTALL_DIR" "$APP_DIR" "$DATA_DIR" "$HOME_DIR" "$STORE_DIR"
 run touch "$INSTALL_DIR/.turbopantry-install"
 if id "$USER_NAME" >/dev/null 2>&1; then
-  note "user $USER_NAME exists (home: $(getent passwd "$USER_NAME" | cut -d: -f6)); its package store is set to $STORE_DIR below"
+  cur_home="$(getent passwd "$USER_NAME" | cut -d: -f6)"; cur_shell="$(getent passwd "$USER_NAME" | cut -d: -f7)"
+  if [ "$cur_home" = "$HOME_DIR" ]; then note "user $USER_NAME exists"
+  elif [ "$(id -u "$USER_NAME")" -lt 1000 ] && case "$cur_shell" in */nologin|*/false) true ;; *) false ;; esac; then
+    # a system account this installer made earlier (for example before the folder was moved): point its home at the folder
+    note "user $USER_NAME exists with home $cur_home: moving its home to $HOME_DIR"; run usermod -d "$HOME_DIR" "$USER_NAME"
+  else note "user $USER_NAME is an ordinary account (home $cur_home): leaving its home alone; the package store still goes to $STORE_DIR"; fi
 else run useradd --system --home-dir "$HOME_DIR" --shell /usr/sbin/nologin "$USER_NAME"; fi
 run chown "$USER_NAME:$USER_NAME" "$INSTALL_DIR" "$APP_DIR" "$HOME_DIR" "$STORE_DIR"
 run chown -R "$USER_NAME:$USER_NAME" "$DATA_DIR"

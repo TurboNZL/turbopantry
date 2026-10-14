@@ -3,27 +3,46 @@
 TurboPantry is one Node program that serves the API and the web app, with its data in one folder (a SQLite database). It runs on any Linux machine that stays on: a Raspberry Pi, a mini PC, a NAS that can run Node. It needs **Node 22.13 or newer**; the installer takes care of that.
 
 ## Install (Linux, one command)
-On the machine, as a user with `sudo`:
+On the machine, as a user with `sudo`. **Choose the folder first**: everything TurboPantry owns goes into that one folder, so it can sit on whichever drive you want (for example `/mnt/data`):
 ```
-curl -fsSL https://raw.githubusercontent.com/TurboNZL/turbopantry/main/scripts/install-pi.sh | sudo bash -s -- --data-dir /var/lib/turbopantry
+curl -fsSL https://raw.githubusercontent.com/TurboNZL/turbopantry/main/scripts/install-pi.sh | sudo bash -s -- --install-dir /mnt/data/turbopantry
 ```
-Add `--dry-run` first to see exactly what it would do. It:
-1. installs git and curl, Chromium (for Osta links; `--no-browser` skips it, about 300 MB) and Node 22 if the machine has none,
-2. makes a service user called `turbopantry` and the data folder,
-3. downloads the app into `/home/turbopantry/turbopantry` and builds the web client,
+Leave `--install-dir` out and the installer asks where to put it (default `/opt/turbopantry`) before it touches anything. Add `--dry-run` first to see exactly what it would do.
+
+### What goes where
+```
+/mnt/data/turbopantry/        <- the folder you chose (it must be new or empty)
+  app/          the program (a git checkout), updated by the Update server button
+  data/         your recipes, lists and accounts: THE THING TO BACK UP
+  home/         the service user's own files (caches)
+  pnpm-store/   downloaded packages used to build the program
+```
+The installer checks the folder before changing anything and stops with an explanation if it is on a drive that cannot work: an NTFS, exFAT or FAT drive (no Linux permissions or symlinks), a drive mounted `noexec` (the build tools could not run), a folder that already has other files in it, or a `/mnt/...` path with nothing mounted there (it would fill the system disk).
+
+### What it puts outside that folder
+Only these, and `systemctl`, `apt` and the service user are how Linux works, not choices:
+- the system user `turbopantry`, whose home is inside your folder,
+- `/etc/systemd/system/turbopantry.service` (it waits for the drive to be mounted before starting),
+- `/etc/sudoers.d/turbopantry` (lets that user stop and start this one service, for updates),
+- apt packages `git` and `curl`, Chromium for Osta links (`--no-browser` skips it, about 300 MB), and Node 22 and pnpm if the machine has none.
+
+### What it does
+1. installs those packages,
+2. makes the folder, the service user and the data folder,
+3. downloads the program into `app/` and builds the web client,
 4. starts it as a systemd service (`turbopantry`) on port 47900,
 5. makes the first account (the **owner**) and prints its **token** once, with the address to open.
 
-Run it again at any time to repair or update. Options: `--no-browser`, `--port`, `--admin NAME` (the owner's name), `--user`, `--branch`, `--yes`. On a Raspberry Pi put `--data-dir` on an external drive rather than the SD card (the installer warns you).
+Run it again at any time to repair or update (it keeps your data). Options: `--install-dir`, `--no-browser`, `--port`, `--admin NAME` (the owner's name), `--user`, `--branch`, `--yes`; `--app-dir` and `--data-dir` exist to split the program and the data into different places (rarely needed).
 
 Then open the address in a browser, go to **Settings → Server**, paste the token and press **Save and test**.
 
 ## Add the people you share it with
 Each person has their own account and token. As a user with `sudo` on the server:
 ```
-sudo -u turbopantry -H bash -c "cd /home/turbopantry/turbopantry/packages/server && TURBOPANTRY_DATA=/var/lib/turbopantry node --experimental-strip-types src/index.ts add-user Sam"
+sudo -u turbopantry -H bash -c "cd /mnt/data/turbopantry/app/packages/server && TURBOPANTRY_DATA=/mnt/data/turbopantry/data node --experimental-strip-types src/index.ts add-user Sam"
 ```
-It prints Sam's token once. Replace `users` for `add-user Sam` to list the accounts. Everyone sees the same recipes; only the first account (the owner) can update the server.
+(Use your own folder in place of `/mnt/data/turbopantry`.) It prints Sam's token once. Replace `users` for `add-user Sam` to list the accounts. Everyone sees the same recipes; only the first account (the owner) can update the server.
 
 ## Running it by hand (no installer)
 You need Node 22.13+, git and pnpm. `git clone https://github.com/TurboNZL/turbopantry.git`, then in it `pnpm install --ignore-scripts --filter @turbopantry/shared --filter @turbopantry/server --filter @turbopantry/web`, `pnpm --filter @turbopantry/web build`, and run `node --experimental-strip-types src/index.ts` from `packages/server`. This also works on Windows and macOS for trying it out; there is no Windows installer.
@@ -33,7 +52,7 @@ You need Node 22.13+, git and pnpm. `git clone https://github.com/TurboNZL/turbo
 |---|---|---|
 | `TURBOPANTRY_PORT` | `47900` | Port to listen on |
 | `TURBOPANTRY_HOST` | `0.0.0.0` | Address to listen on (`127.0.0.1` if only a tunnel on the same machine connects) |
-| `TURBOPANTRY_DATA` | `./data` | Where the database lives. Back this folder up. |
+| `TURBOPANTRY_DATA` | `./data` | Where the database lives (the installer sets it to `<folder>/data`). Back this folder up. |
 | `TURBOPANTRY_WEB` | `apps/web/dist` in the checkout | The web app's folder |
 | `TURBOPANTRY_CHROMIUM` | found on the `PATH` | The browser used to read Osta links (`chromium`, `google-chrome`). Without one, Osta links say the server has no browser; everything else works. |
 | `TURBOPANTRY_BROWSER_NO_SANDBOX` | | `1` if Chromium will not start (some containers). Running the service as root already does this. |
@@ -41,8 +60,14 @@ You need Node 22.13+, git and pnpm. `git clone https://github.com/TurboNZL/turbo
 
 The installer sets the data folder and the port in the service file (`/etc/systemd/system/turbopantry.service`).
 
+## Moving it to another drive later
+Stop the service (`sudo systemctl stop turbopantry`), copy the whole install folder to the new place (`sudo rsync -a /old/turbopantry/ /new/turbopantry/`), then run the installer again with `--install-dir /new/turbopantry` (it keeps the data it finds) and remove the old folder once you have checked the new one works.
+
+## Removing it
+`sudo systemctl disable --now turbopantry`, then delete `/etc/systemd/system/turbopantry.service` and `/etc/sudoers.d/turbopantry`, run `sudo userdel turbopantry`, and delete the install folder. That is everything (apt packages, Node and pnpm are left in place).
+
 ## Backups
-Copy the data folder (while the service is stopped, or idle). The database uses WAL mode: copy the `.db`, `.db-wal` and `.db-shm` files together.
+Copy the `data/` folder (while the service is stopped, or idle). The database uses WAL mode: copy the `.db`, `.db-wal` and `.db-shm` files together.
 
 ## Osta links need a browser
 On Debian or Raspberry Pi OS: `sudo apt install chromium`. Ubuntu has no usable `chromium` package (its `chromium-browser` is a snap that cannot run as a service): install Google Chrome from Google's `.deb`, or point `TURBOPANTRY_CHROMIUM` at any Chromium or Chrome binary. Check with `chromium --version` (or `google-chrome --version`) as the service user. The browser runs only for an Osta import, one at a time, and may only talk to Osta and the Google services Osta uses.
