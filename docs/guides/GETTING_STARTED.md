@@ -17,5 +17,8 @@ Open the server's address. Go to **Settings → Server**, paste the token, press
 ## 5. Add your first recipe
 **Recipes → Import from a link** (see [IMPORTING.md](IMPORTING.md)), or **Write one**. Open a recipe to change the number of servings: the quantities scale with it. Amounts are in bold, the ingredients are bold inside the method, and **Amounts on/off** hides every quantity (in the list and in the method) when you just want to see what goes in.
 
+## 6. Stock the pantry and shop
+**Pantry** is what is in the house; **Shopping** is the shared list. Both update live on every phone. See [PANTRY.md](PANTRY.md): typing "2kg flour" adds it, ticking something off the list puts it in the pantry, and a recipe adds only what you are missing.
+
 ## What is not here yet
-Shopping lists and importing from Instagram. The Shopping page exists but is empty. This guide will grow as they land.
+Importing from Instagram, the Android app, and working offline for edits (the screens show what they last had when the signal drops; changes need a connection).

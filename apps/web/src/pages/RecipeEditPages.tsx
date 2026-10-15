@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { RecipeInput } from '@turbopantry/shared';
 import { EMPTY_RECIPE, RecipeForm } from '../components/RecipeForm.tsx';
 import { LoadError } from '../components/SignInNotice.tsx';
+import { defaultChoices, IngredientLinker, resolveLinks, type Choices } from '../components/IngredientLinker.tsx';
+import { useItems } from '../lib/data.ts';
 import { ApiError } from '../lib/api.ts';
 import { useApi, useLoad } from '../lib/useApi.ts';
 
@@ -60,12 +62,14 @@ export function ImportPage() {
   const [draft, setDraft] = useState<RecipeInput | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [alternative, setAlternative] = useState<{ url: string; label: string } | null>(null);
-  const { busy: saving, error: saveError, submit } = useSave((r) => api.createRecipe(r));
+  const { items } = useItems();
+  const [choices, setChoices] = useState<Choices>({});
+  const { busy: saving, error: saveError, submit } = useSave(async (r) => api.createRecipe({ ...r, ingredients: await resolveLinks(api, r.ingredients, choices, items) }));
 
   async function fetchDraft(e?: React.FormEvent, address = url) {
     e?.preventDefault();
     setBusy(true); setError(null); setDraft(null); setWarnings([]); setAlternative(null);
-    try { const d = await api.importUrl(address.trim()); setDraft(d.recipe); setWarnings(d.warnings); setAlternative(d.alternative ?? null); }
+    try { const d = await api.importUrl(address.trim()); setDraft(d.recipe); setChoices(defaultChoices(d.recipe.ingredients, items)); setWarnings(d.warnings); setAlternative(d.alternative ?? null); }
     catch (err) { setError(err instanceof ApiError ? (err.status === 401 ? 'Sign in first (Settings → Server).' : err.message) : EXPLAIN.unsupported!); }
     finally { setBusy(false); }
   }
@@ -85,7 +89,9 @@ export function ImportPage() {
           <div className="card p-3 text-sm">Found <strong>{draft.title || 'a recipe'}</strong> with {draft.ingredients.length} ingredients and {draft.steps.length} steps. Check it, then save.</div>
           {warnings.map((w) => <p key={w} className="rounded-theme bg-warn/15 p-3 text-sm" role="status">{w}</p>)}
           {alternative && <button type="button" className="btn btn-accent" disabled={busy} onClick={() => { setUrl(alternative.url); void fetchDraft(undefined, alternative.url); }}>Import from {alternative.label} instead</button>}
-          <RecipeForm initial={draft} submitLabel="Save recipe" busy={saving} onSubmit={(r) => void submit(r)} />
+          <RecipeForm initial={draft} submitLabel="Save recipe" busy={saving} onSubmit={(r) => void submit(r)}>
+            {draft.ingredients.length > 0 && <IngredientLinker ingredients={draft.ingredients} items={items} choices={choices} onChange={setChoices} />}
+          </RecipeForm>
         </div>
       )}
     </div>

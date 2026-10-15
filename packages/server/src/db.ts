@@ -35,6 +35,51 @@ const MIGRATIONS: string[] = [
   // the first account ever made is the owner and may update the server; others are household members
   `ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0;
    UPDATE users SET is_admin = 1 WHERE id = (SELECT MIN(id) FROM users);`,
+  // the pantry (what the household keeps), the shared shopping list, and a log of every change to the stock (for undo and, later, predictions)
+  `CREATE TABLE items (
+     id INTEGER PRIMARY KEY,
+     name TEXT NOT NULL,
+     key TEXT NOT NULL,
+     aliases TEXT NOT NULL DEFAULT '[]',
+     category TEXT NOT NULL DEFAULT 'Other',
+     unit TEXT,
+     qty REAL NOT NULL DEFAULT 0,
+     step REAL NOT NULL DEFAULT 1,
+     default_qty REAL NOT NULL DEFAULT 1,
+     min_qty REAL NOT NULL DEFAULT 0,
+     staple INTEGER NOT NULL DEFAULT 0,
+     tracked INTEGER NOT NULL DEFAULT 0,
+     grams_per_cup REAL,
+     place TEXT,
+     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+   );
+   CREATE UNIQUE INDEX items_key ON items (key);
+   CREATE TABLE list_items (
+     id INTEGER PRIMARY KEY,
+     item_id INTEGER REFERENCES items(id) ON DELETE SET NULL,
+     name TEXT NOT NULL,
+     qty REAL,
+     unit TEXT,
+     note TEXT NOT NULL DEFAULT '',
+     checked INTEGER NOT NULL DEFAULT 0,
+     stock_applied REAL NOT NULL DEFAULT 0,
+     category TEXT NOT NULL DEFAULT 'Other',
+     added_by TEXT NOT NULL,
+     recipe_id INTEGER,
+     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+     checked_at TEXT
+   );
+   CREATE TABLE stock_log (
+     id INTEGER PRIMARY KEY,
+     item_id INTEGER NOT NULL,
+     delta REAL NOT NULL,
+     reason TEXT NOT NULL,
+     user TEXT NOT NULL,
+     recipe_id INTEGER,
+     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+   );
+   CREATE INDEX stock_log_item ON stock_log (item_id, created_at);`,
 ];
 
 export type Db = DatabaseSync;
@@ -79,3 +124,15 @@ export function userForToken(db: Db, token: string): User | null {
 }
 
 export const countUsers = (db: Db) => (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
+
+let savepoints = 0;
+/**
+ * Runs `fn` as one all-or-nothing unit. Uses a SAVEPOINT, so units can nest (ticking a shopping line changes stock, which is a unit of its own):
+ * if anything throws, everything inside rolls back and the error carries on.
+ */
+export function atomically<T>(db: Db, fn: () => T): T {
+  const name = `sp${++savepoints}`;
+  db.exec(`SAVEPOINT ${name}`);
+  try { const out = fn(); db.exec(`RELEASE ${name}`); return out; }
+  catch (e) { db.exec(`ROLLBACK TO ${name}`); db.exec(`RELEASE ${name}`); throw e; }
+}

@@ -4,6 +4,11 @@ import { extname, join, normalize, sep } from 'node:path';
 import { APP_NAME, type Health, type Status } from '@turbopantry/shared';
 import { countUsers, userForToken, type Db, type User } from './db.ts';
 import { countRecipes, createRecipe, deleteRecipe, getRecipe, listRecipes, updateRecipe, validateRecipe } from './recipes.ts';
+import { HttpError, json, readJson } from './http.ts';
+import { Hub } from './events.ts';
+import { countOpen } from './list.ts';
+import { linkIngredients, suggestionsFor } from './link.ts';
+import { pantryRoutes } from './pantry-routes.ts';
 import { importFromUrl } from './import/index.ts';
 import type { Updater } from './update.ts';
 import type { PageFetcher } from './import/safeFetch.ts';
@@ -16,11 +21,6 @@ const TYPES: Record<string, string> = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.woff2': 'font/woff2', '.woff': 'font/woff', '.webmanifest': 'application/manifest+json',
 };
 
-function json(res: ServerResponse, status: number, body: unknown) {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-  res.end(JSON.stringify(body));
-}
-
 function bearer(req: IncomingMessage): string | null {
   const m = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization ?? '');
   return m?.[1] ?? null;
@@ -28,27 +28,18 @@ function bearer(req: IncomingMessage): string | null {
 
 export interface AppOptions { db: Db; webDir?: string; /** How pages are fetched for import. Tests pass a fake; the default refuses private addresses. */ fetchPage?: PageFetcher; /** Renders JavaScript-only pages (Osta links). index.ts passes the real headless browser; tests pass a fake. */ render?: PageRenderer; /** Present only when this server can update itself (see update.ts and index.ts). */ updater?: Updater; /** Shown by /api/health. index.ts reads it from git (the newest tag, e.g. v2026.10.3). */ version?: string }
 
-const MAX_BODY = 1024 * 1024;
-class HttpError extends Error {
-  status: number;
-  constructor(status: number, message: string) { super(message); this.status = status; }
-}
-
-async function readJson(req: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = []; let size = 0;
-  for await (const c of req as AsyncIterable<Buffer>) { size += c.length; if (size > MAX_BODY) throw new HttpError(413, 'That request is too large.'); chunks.push(c); }
-  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new HttpError(400, 'The request body is not valid JSON.'); }
-}
-
 /** The whole HTTP surface. Every /api route except /api/health needs a token: the server is meant to sit behind a public tunnel. */
 export function createApp({ db, webDir, fetchPage = safeFetchPage, render, updater, version = 'dev' }: AppOptions): Server {
-  return createServer((req, res) => {
+  const hub = new Hub();
+  const server = createServer((req, res) => {
     handle(req, res).catch((e) => {
       if (e instanceof HttpError) return json(res, e.status, { error: e.message });
       console.error(e);
       if (!res.headersSent) json(res, 500, { error: 'Server error' }); else res.end();
     });
   });
+  server.on('close', () => hub.closeAll());
+  return server;
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const url = new URL(req.url ?? '/', 'http://localhost');
@@ -62,7 +53,7 @@ export function createApp({ db, webDir, fetchPage = safeFetchPage, render, updat
       const user = token ? userForToken(db, token) : null;
       if (!user) return json(res, 401, { error: 'Wrong or missing token' });
       if (path === '/api/status' && req.method === 'GET') {
-        return json(res, 200, { user: user.name, users: countUsers(db), recipes: countRecipes(db), lists: 0 } satisfies Status);
+        return json(res, 200, { user: user.name, users: countUsers(db), recipes: countRecipes(db), lists: countOpen(db) } satisfies Status);
       }
       return api(path, url, req, res, user);
     }
@@ -73,6 +64,8 @@ export function createApp({ db, webDir, fetchPage = safeFetchPage, render, updat
   async function api(path: string, url: URL, req: IncomingMessage, res: ServerResponse, user: User) {
     const m = req.method ?? 'GET';
     const userName = user.name;
+    if (path === '/api/events' && m === 'GET') { hub.join(req, res); return; }
+    if (await pantryRoutes(path, m, req, res, db, user, hub)) return;
     if (path === '/api/admin/update') {
       if (!user.isAdmin) return json(res, 403, { error: 'Only the owner (the first account) can update the server.' });
       if (m === 'GET') return json(res, 200, { available: !!updater?.available, restarts: !!updater?.restarts, ...(updater?.state() ?? { status: 'idle', log: [], startedAt: null, restarting: false }) });
@@ -86,7 +79,10 @@ export function createApp({ db, webDir, fetchPage = safeFetchPage, render, updat
       if (m === 'GET') return json(res, 200, listRecipes(db, url.searchParams.get('q') ?? ''));
       if (m === 'POST') {
         const r = validateRecipe(await readJson(req));
-        return typeof r === 'string' ? json(res, 400, { error: r }) : json(res, 201, createRecipe(db, r, userName));
+        if (typeof r === 'string') return json(res, 400, { error: r });
+        const saved = createRecipe(db, { ...r, ingredients: linkIngredients(db, r.ingredients) }, userName);
+        hub.send('recipes', userName);
+        return json(res, 201, saved);
       }
       return json(res, 405, { error: 'Method not allowed' });
     }
@@ -97,17 +93,21 @@ export function createApp({ db, webDir, fetchPage = safeFetchPage, render, updat
       if (m === 'PUT') {
         const r = validateRecipe(await readJson(req));
         if (typeof r === 'string') return json(res, 400, { error: r });
-        const saved = updateRecipe(db, id, r);
+        const saved = updateRecipe(db, id, { ...r, ingredients: linkIngredients(db, r.ingredients) });
+        if (saved) hub.send('recipes', userName);
         return saved ? json(res, 200, saved) : json(res, 404, { error: 'No such recipe' });
       }
-      if (m === 'DELETE') return deleteRecipe(db, id) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'No such recipe' });
+      if (m === 'DELETE') { const ok = deleteRecipe(db, id); if (ok) hub.send('recipes', userName); return ok ? json(res, 200, { ok: true }) : json(res, 404, { error: 'No such recipe' }); }
       return json(res, 405, { error: 'Method not allowed' });
     }
     if (path === '/api/import' && m === 'POST') {
       const body = await readJson(req) as { url?: unknown };
       if (typeof body?.url !== 'string' || !body.url.trim()) return json(res, 400, { error: 'Send {"url": "https://..."}', code: 'bad-url' });
       const result = await importFromUrl(body.url.trim(), { fetchPage, render });
-      return 'recipe' in result ? json(res, 200, result) : json(res, 422, result);
+      if (!('recipe' in result)) return json(res, 422, result);
+      // link what is already in the pantry (exact words only) and say what else it could be, so the review can confirm each line
+      const linked = linkIngredients(db, result.recipe.ingredients);
+      return json(res, 200, { ...result, recipe: { ...result.recipe, ingredients: linked }, suggestions: suggestionsFor(db, linked) });
     }
     return json(res, 404, { error: 'Not found' });
   }

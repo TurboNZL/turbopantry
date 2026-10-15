@@ -9,6 +9,8 @@ export interface DeviceSettings {
   wallpaperDarkness: number;
   /** Recipes: show the amounts (in the ingredient list and inside the method). Off = names only. */
   showQuantities: boolean;
+  /** Recipes: how amounts are shown. "original" as written, "metric-cups" (oz and lb become g, cups stay), "metric-grams" (and cups of flour, sugar, butter, oats become g). */
+  unitMode: 'original' | 'metric-cups' | 'metric-grams';
   themeUpdates: boolean;
   themesToken: string;
   /** '' = the server that served this page (the normal case); otherwise the address of another server (the Android app). */
@@ -21,7 +23,7 @@ export interface DeviceSettings {
 
 export const DEFAULT_SETTINGS: DeviceSettings = {
   theme: 'auto', ui: 'auto', layout: 'side', glass: 'regular', wallpaper: false, wallpaperCustom: false, wallpaperDarkness: 0.35,
-  showQuantities: true, themeUpdates: true, themesToken: '', serverUrl: '', token: '', cfAccessId: '', cfAccessSecret: '',
+  showQuantities: true, unitMode: 'original', themeUpdates: true, themesToken: '', serverUrl: '', token: '', cfAccessId: '', cfAccessSecret: '',
 };
 
 const KEY = 'turbopantry.settings';

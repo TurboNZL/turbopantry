@@ -11,6 +11,8 @@ export interface Ingredient {
   note: string | null;
   /** Group heading such as "Cheese sauce". */
   section: string | null;
+  /** The pantry item this line is, chosen in the import review (the original wording above is never changed). */
+  itemId?: number | null;
 }
 
 export interface RecipeInput {
@@ -50,8 +52,20 @@ export type ImportErrorCode = 'bad-url' | 'blocked' | 'fetch-failed' | 'not-html
 export interface ImportError { error: string; code: ImportErrorCode }
 
 /** A successful import: a draft to review, plus things the user should know about it ("this source has no method"). */
+/** For one ingredient of an import draft: what the pantry already has that it could be, so the user can confirm or change it. */
+export interface IngredientSuggestion {
+  index: number;
+  /** A pantry item whose name or alias is the same words: linked already. */
+  exact: { id: number; name: string } | null;
+  /** Similar items that must be confirmed, never guessed. */
+  candidates: { id: number; name: string; kind: 'broader' | 'narrower' | 'related' }[];
+  /** The name a new pantry item would get. */
+  newName: string;
+}
+
 export interface ImportDraft {
   recipe: RecipeInput;
+  suggestions?: IngredientSuggestion[];
   warnings: string[];
   /** Another address the same recipe can be imported from, probably with cleaner data (an Osta recipe that links to the site it came from). */
   alternative?: { url: string; label: string };
