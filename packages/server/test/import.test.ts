@@ -204,6 +204,7 @@ describe('Osta share pages', () => {
 });
 
 // These start a real Chromium (the one on this machine); where there is none they are skipped, and CLAUDE.md says so.
+// 30 s per test: a cold Chromium on a CI runner took over vitest's 5 s default (the Check runs on main failed for it).
 describe.skipIf(!findChromium())('headless renderer (real Chromium, local test pages)', () => {
   const localOnly = (host: string) => host === '127.0.0.1';
   const render = createBrowserRenderer({ allowHost: localOnly, noSandbox: true });
@@ -252,7 +253,7 @@ describe.skipIf(!findChromium())('headless renderer (real Chromium, local test p
     const bad = createBrowserRenderer({ executablePath: '/nonexistent/chrome' });
     await expect(bad('https://example.com', { readyText: 'x' })).rejects.toMatchObject({ code: 'no-browser' });
   });
-});
+}, 30_000);
 
 describe('OSTA_HOSTS allow-list', () => {
   it.each(['ostarecipes.com', 'www.ostarecipes.com', 'firestore.googleapis.com', 'firebasestorage.googleapis.com', 'www.gstatic.com'])('allows %s', (h) => expect(OSTA_HOSTS(h)).toBe(true));
