@@ -34,7 +34,7 @@ export function validateRecipe(body: unknown): RecipeInput | string {
     const i = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
     const line = str(i.raw, 500) || str(i.name, 500);
     if (!line) continue;
-    ingredients.push({ raw: line, quantity: optNum(i.quantity, 1e6), quantityMax: optNum(i.quantityMax, 1e6), unit: optStr(i.unit, 30), name: str(i.name, 500) || line, note: optStr(i.note, 500), section: optStr(i.section, 100) });
+    ingredients.push({ raw: line, quantity: optNum(i.quantity, 1e6), quantityMax: optNum(i.quantityMax, 1e6), unit: optStr(i.unit, 30), name: str(i.name, 500) || line, note: optStr(i.note, 500), section: optStr(i.section, 100), itemId: typeof i.itemId === 'number' && Number.isInteger(i.itemId) && i.itemId > 0 ? i.itemId : null });
   }
   const steps = b.steps.map((s) => str(s, 4000)).filter(Boolean);
   const tags = Array.isArray(b.tags) ? [...new Set(b.tags.map((t) => str(t, 40).toLowerCase()).filter(Boolean))].slice(0, 30) : [];

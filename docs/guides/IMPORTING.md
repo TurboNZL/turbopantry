@@ -14,6 +14,9 @@
 | Pages with no machine-readable recipe | "No recipe was found on that page." Paste the text into **Write one**. |
 | Sites that block automated readers | "The website refused the request." Same workaround. |
 
+## Linking to your pantry
+After importing (and when you save any recipe) each ingredient is linked to a pantry item so the recipe can say what you have and add only what is missing. The import page shows a **Link to your items** panel: lines that match an item you already have are linked, and only the ones that could be something you already have are listed for you to check. The kind of ingredient matters, so "fettuccine pasta" is offered "Pasta" as *less specific* and is not linked unless you choose it. See [PANTRY.md](PANTRY.md).
+
 ## Good to know
 - The original wording of every ingredient line is kept, so if the quantity or unit is guessed wrong, nothing is lost: edit the line.
 - Photos are linked from the original site, not copied. If the site removes the photo it disappears here too.

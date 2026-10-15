@@ -1,13 +1,17 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { BookOpen, Search, Settings, ShoppingCart } from 'lucide-react';
+import { BookOpen, Package, Search, Settings, ShoppingCart } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { effectiveUi } from 'turbothemes';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/cn.ts';
 import { useStore } from '../lib/store.ts';
+import { useListEntries } from '../lib/data.ts';
+import { useLiveConnection } from '../lib/live.ts';
+import { Toasts } from './Toasts.tsx';
 
 const NAV = [
   { to: '/recipes', label: 'Recipes', icon: BookOpen },
+  { to: '/pantry', label: 'Pantry', icon: Package },
   { to: '/shopping', label: 'Shopping', icon: ShoppingCart },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
@@ -60,6 +64,10 @@ function CandyDefs() {
 export function Layout() {
   const nav = useNavigate();
   const { pathname } = useLocation();
+  useLiveConnection(); // one live stream per device: pantry, list and recipes update on every phone at once
+  const open = useListEntries().entries.filter((e) => !e.checked).length;
+  const badge = (to: string, big = false) => (to === '/shopping' && open > 0 ? <span className={cn('inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1 text-[11px] font-bold leading-5 text-accent-fg', big ? 'ml-1' : 'absolute right-1/4 top-0.5')} aria-label={`${open} on the list`}>{open}</span> : null);
+  const onRecipes = pathname.startsWith('/recipes') || pathname === '/';
   const sideRef = useIndicator<HTMLElement>(pathname);
   const tabRef = useIndicator<HTMLElement>(pathname);
   const [q, setQ] = useState('');
@@ -78,7 +86,7 @@ export function Layout() {
           <div className="bt-brand mb-3 flex items-center gap-2.5 px-3 pt-1 text-lg font-bold tracking-tight"><img src={logo} alt="" width={26} height={26} className="h-[26px] w-[26px] shrink-0" draggable={false} /><span className="bt-label-text">TurboPantry</span></div>
           {NAV.map(({ to, label, icon: Icon, ...rest }) => (
             <NavLink key={to} to={to} end={'end' in rest} title={label} className="bt-nav flex items-center gap-3 px-3 py-2 text-sm font-medium">
-              <Icon size={18} className="shrink-0" /><span className="bt-label-text">{label}</span>
+              <Icon size={18} className="shrink-0" /><span className="bt-label-text">{label}</span>{badge(to, true)}
             </NavLink>
           ))}
         </aside>}
@@ -87,12 +95,12 @@ export function Layout() {
             <div className="bt-topin relative mx-auto flex max-w-3xl items-center gap-3">
               <div className={cn('flex shrink-0 items-center gap-2 font-bold', !noSide && 'md:hidden')}><img src={logo} alt="TurboPantry" width={28} height={28} className="h-7 w-7 shrink-0" draggable={false} />{topbar && <span className="hidden md:inline">TurboPantry</span>}</div>
               {topbar && <nav className="bt-toplinks hidden min-w-0 items-center gap-6 overflow-x-auto md:flex" aria-label="Pages">
-                {NAV.map(({ to, label, ...rest }) => <NavLink key={to} to={to} end={'end' in rest} className="bt-toplink whitespace-nowrap">{label}</NavLink>)}
+                {NAV.map(({ to, label, ...rest }) => <NavLink key={to} to={to} end={'end' in rest} className="bt-toplink whitespace-nowrap">{label}{badge(to, true)}</NavLink>)}
               </nav>}
-              <div className="bt-search relative flex-1">
+              {onRecipes ? <div className="bt-search relative flex-1">
                 <Search size={16} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-muted" />
                 <input className="input pl-9" placeholder="Search recipes" aria-label="Search recipes" value={q} onChange={(e) => setQ(e.target.value)} />
-              </div>
+              </div> : <div className="flex-1" />}
             </div>
           </form>
           <div className="bt-content mx-auto max-w-6xl p-4 md:p-6"><div key={pathname} className="bt-page"><Outlet /></div></div>
@@ -101,9 +109,10 @@ export function Layout() {
       <nav ref={tabRef} className={cn('bt-tabbar bt-shell relative flex', !dock && 'md:hidden')}>
         <span className="bt-ind" aria-hidden />
         {NAV.map(({ to, label, icon: Icon, ...rest }) => (
-          <NavLink key={to} to={to} end={'end' in rest} className="bt-tab flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px]"><Icon size={20} />{label}</NavLink>
+          <NavLink key={to} to={to} end={'end' in rest} className="bt-tab relative flex min-h-[3.25rem] flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[11px]"><Icon size={22} />{label}{badge(to)}</NavLink>
         ))}
       </nav>
+      <Toasts />
     </div>
   );
 }

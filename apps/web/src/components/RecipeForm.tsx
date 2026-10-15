@@ -12,7 +12,7 @@ const num = (s: string) => (s.trim() === '' ? null : parseMinutes(s));
  * Edits a recipe as plain text: one ingredient per line (a line starting with # is a section heading), one step per line.
  * Ingredient lines are parsed on save, and the original wording is always kept, so nothing is lost if the parser guesses wrong.
  */
-export function RecipeForm({ initial, submitLabel, busy, onSubmit }: { initial: RecipeInput; submitLabel: string; busy?: boolean; onSubmit(r: RecipeInput): void }) {
+export function RecipeForm({ initial, submitLabel, busy, onSubmit, children }: { initial: RecipeInput; submitLabel: string; busy?: boolean; onSubmit(r: RecipeInput): void; /** shown just above the save button (the import review puts the pantry links here) */ children?: React.ReactNode }) {
   const [title, setTitle] = useState(initial.title);
   const [description, setDescription] = useState(initial.description);
   const [imageUrl, setImageUrl] = useState(initial.imageUrl ?? '');
@@ -31,7 +31,8 @@ export function RecipeForm({ initial, submitLabel, busy, onSubmit }: { initial: 
       ...initial, title: title.trim(), description: description.trim(), imageUrl: imageUrl.trim() || null,
       servings: servings.trim() ? parseServings(servings) : null, prepMinutes, cookMinutes,
       totalMinutes: initial.totalMinutes !== null && prepMinutes === initial.prepMinutes && cookMinutes === initial.cookMinutes ? initial.totalMinutes : null,
-      ingredients: parseIngredientBlock(ingredients), steps: cleanSteps(steps.split(/\n\s*\n|\r?\n/)), // pasted step numbers and headings ("1", "Directions") are dropped
+      // the ingredient lines are re-read from the text, so a line that is unchanged keeps its link to the pantry
+      ingredients: parseIngredientBlock(ingredients).map((ing) => { const was = initial.ingredients.find((o) => o.raw === ing.raw); return was?.itemId ? { ...ing, itemId: was.itemId } : ing; }), steps: cleanSteps(steps.split(/\n\s*\n|\r?\n/)), // pasted step numbers and headings ("1", "Directions") are dropped
       tags: tags.split(',').map((t) => t.trim()).filter(Boolean), notes: notes.trim(),
     });
   }
@@ -53,7 +54,8 @@ export function RecipeForm({ initial, submitLabel, busy, onSubmit }: { initial: 
       <label className="block"><span className={label}>Method</span><textarea className="input min-h-[10rem]" value={steps} onChange={(e) => setSteps(e.target.value)} placeholder="One step per line or paragraph. Pasted step numbers are cleaned up for you." /></label>
       <label className="block"><span className={label}>Tags <span className="font-normal text-muted">(comma separated)</span></span><input className="input" value={tags} onChange={(e) => setTags(e.target.value)} /></label>
       <label className="block"><span className={label}>Notes</span><textarea className="input min-h-[4rem]" value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
-      <button className="btn btn-accent" disabled={busy || !title.trim()}>{busy ? 'Saving…' : submitLabel}</button>
+      {children}
+      <button className="btn btn-accent h-12 w-full md:w-auto" disabled={busy || !title.trim()}>{busy ? 'Saving…' : submitLabel}</button>
     </form>
   );
 }
