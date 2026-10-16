@@ -8,6 +8,8 @@
 .f3-viewport { position: relative; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: grab; outline-offset: -2px;
   height: clamp(280px, 50vh, 560px); border: 1px solid hsl(var(--line)); border-radius: var(--radius, 0.75rem); background: hsl(var(--raised));
   transition: --f3-yaw .24s ease-out, --f3-pitch .24s ease-out, --f3-z .24s ease-out, --f3-px .24s ease-out, --f3-py .24s ease-out; }
+.f3-viewport[data-compact] { height: clamp(200px, 36vh, 460px); }
+@media (min-width: 1024px) { .f3-viewport[data-compact] { height: clamp(320px, 66vh, 720px); } }
 .f3-viewport[data-gesture] { transition: none; cursor: grabbing; }
 @media (prefers-reduced-motion: reduce) { .f3-viewport { transition: none; } }
 .f3-world { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform-style: preserve-3d;
@@ -32,13 +34,14 @@
 .f3-block[data-edit] { cursor: move; }
 .f3-block[data-wall] { cursor: default; }
 
-/* the label always faces the screen and keeps its size whatever the zoom */
-.f3-tag { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; transform-style: flat;
-  transform: translateZ(calc(var(--h) + 14px)) rotateZ(calc(var(--f3-yaw) * -1)) rotateX(calc(var(--f3-pitch) * -1)) scale(calc(1 / var(--f3-z))); }
-.f3-tag > span { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); display: inline-flex; align-items: center; gap: 3px; max-width: 120px; white-space: nowrap;
-  font-size: 11px; line-height: 1; font-weight: 600; padding: 3px 6px; border-radius: 999px; color: #111; background: rgb(255 255 255 / .9); box-shadow: 0 1px 3px rgb(0 0 0 / .35); }
-.f3-tag b { display: inline-flex; min-width: 16px; height: 16px; padding: 0 4px; align-items: center; justify-content: center; border-radius: 999px; font-size: 10px; font-weight: 700; color: #fff; background: #d97706; }
-.f3-tag b.ok { background: #64748b; }
-.f3-tag b.walk { background: hsl(var(--accent)); color: hsl(var(--accent-fg)); }
-.f3-tag .t { overflow: hidden; text-overflow: ellipsis; }
-.f3-block[data-sel] .f3-tag > span { box-shadow: 0 0 0 2px hsl(var(--accent)), 0 1px 3px rgb(0 0 0 / .35); }
+/* labels: a flat layer above the scene, placed with the same camera variables (trigonometry in CSS keeps them in step with the animation) */
+.f3-labels { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
+.f3-label { position: absolute; display: inline-flex; align-items: center; gap: 3px; max-width: 130px; white-space: nowrap; transform: translate(-50%, -100%);
+  left: calc(var(--f3-px) + var(--f3-z) * (var(--bx) * cos(var(--f3-yaw)) - var(--by) * sin(var(--f3-yaw))) * 1px);
+  top: calc(var(--f3-py) + var(--f3-z) * ((var(--bx) * sin(var(--f3-yaw)) + var(--by) * cos(var(--f3-yaw))) * cos(var(--f3-pitch)) - var(--bz) * sin(var(--f3-pitch))) * 1px);
+  font-size: 11px; line-height: 1; font-weight: 600; padding: 3px 6px; border-radius: 999px; color: #111; background: rgb(255 255 255 / .92); box-shadow: 0 1px 3px rgb(0 0 0 / .35); }
+.f3-label[data-sel] { box-shadow: 0 0 0 2px hsl(var(--accent)), 0 1px 3px rgb(0 0 0 / .35); z-index: 1; }
+.f3-label b { display: inline-flex; min-width: 16px; height: 16px; padding: 0 4px; align-items: center; justify-content: center; border-radius: 999px; font-size: 10px; font-weight: 700; color: #fff; background: #d97706; }
+.f3-label b.ok { background: #64748b; }
+.f3-label b.walk { background: hsl(var(--accent)); color: hsl(var(--accent-fg)); }
+.f3-label .t { overflow: hidden; text-overflow: ellipsis; }

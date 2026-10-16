@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { canPlace, footprint, holdsThings, snap, titleCase, type Block } from '@turbopantry/shared';
 import { CELL, STEP_H, screenToFloor, type CameraApi } from './camera.ts';
 import './floor3d.css';
@@ -7,14 +7,35 @@ export interface BlockInfo { badge?: string | number; tone?: 'warn' | 'ok' | 'wa
 
 const FRONT: Record<number, string> = { 0: 's', 90: 'w', 180: 'n', 270: 'e' };
 
-const Block3D = memo(function Block3D({ b, selected, editable, badge, tone, hot }: { b: Block; selected: boolean; editable: boolean; badge?: string | number; tone?: BlockInfo['tone']; hot?: boolean }) {
+const Block3D = memo(function Block3D({ b, selected, editable, hot }: { b: Block; selected: boolean; editable: boolean; hot?: boolean }) {
   const f = footprint(b), wall = !holdsThings(b.kind);
   const style = { left: b.x * CELL, top: b.y * CELL, width: f.w * CELL, height: f.d * CELL, '--h': `${b.h * STEP_H}px`, '--c': b.color } as CSSProperties;
-  const showTag = (!wall || selected || editable) && (b.label || badge !== undefined);
   return (
     <div className="f3-block" data-bid={b.id} data-kind={b.kind} data-front={FRONT[b.rot]} data-sel={selected || undefined} data-hot={hot || undefined} data-edit={editable || undefined} data-wall={(wall && !editable) || undefined} style={style}>
       <i className="f3-top" /><i className="f3-s" /><i className="f3-n" /><i className="f3-e" /><i className="f3-w" />
-      {showTag && <div className="f3-tag"><span>{badge !== undefined && tone === 'walk' && <b className="walk">{badge}</b>}<span className="t">{titleCase(b.label)}</span>{badge !== undefined && tone !== 'walk' && <b className={tone === 'warn' ? '' : 'ok'}>{badge}</b>}</span></div>}
+    </div>
+  );
+});
+
+/**
+ * Labels are drawn in a flat layer on top of the 3D scene (a label hidden behind a neighbouring block would be useless). Each one is placed by CSS
+ * from the same camera variables as the scene, so it follows the block exactly, including while the camera animates.
+ */
+const Labels = memo(function Labels({ blocks, size, selectedId, editable, info }: { blocks: Block[]; size: number; selectedId?: string | null; editable: boolean; info?: Map<string, BlockInfo> }) {
+  return (
+    <div className="f3-labels" aria-hidden>
+      {blocks.map((b) => {
+        const i = info?.get(b.id), f = footprint(b), sel = b.id === selectedId;
+        if ((!holdsThings(b.kind) && !sel && !editable) || (!b.label && i?.badge === undefined)) return null;
+        const style = { '--bx': ((b.x + f.w / 2) * CELL - (size * CELL) / 2), '--by': ((b.y + f.d / 2) * CELL - (size * CELL) / 2), '--bz': b.h * STEP_H + 4 } as CSSProperties;
+        return (
+          <span key={b.id} className="f3-label" data-sel={sel || undefined} style={style}>
+            {i?.badge !== undefined && i.tone === 'walk' && <b className="walk">{i.badge}</b>}
+            <span className="t">{titleCase(b.label)}</span>
+            {i?.badge !== undefined && i.tone !== 'walk' && <b className={i.tone === 'warn' ? '' : 'ok'}>{i.badge}</b>}
+          </span>
+        );
+      })}
     </div>
   );
 });
@@ -29,27 +50,40 @@ type Gesture =
  * with snapping and no overlaps); one finger on the empty floor pans or turns the view (the Move/Turn switch); two fingers pinch to zoom.
  * The mouse wheel zooms, shift or right-drag turns. Arrow keys pan the view (the editor claims them for the selected block through `onKey`).
  */
-export function Scene3D({ cam, size, blocks, selectedId, editable = false, info, onTap, onDragStart, onMove, onDragEnd, onKey, label = 'Floor plan', height, children }: {
+export function Scene3D({ cam, size, blocks, selectedId, editable = false, info, onTap, onDragStart, onMove, onDragEnd, onKey, label = 'Floor plan', compact = false, children }: {
   cam: CameraApi; size: number; blocks: Block[]; selectedId?: string | null; editable?: boolean; info?: Map<string, BlockInfo>;
   onTap?(id: string | null): void; onDragStart?(id: string): void; onMove?(id: string, x: number, y: number): void; onDragEnd?(): void;
   /** Return true when the key was used. */
-  onKey?(e: React.KeyboardEvent): boolean; label?: string; height?: string; children?: ReactNode;
+  onKey?(e: React.KeyboardEvent): boolean; label?: string; compact?: boolean; children?: ReactNode;
 }) {
   const vp = useRef<HTMLDivElement>(null);
   const blocksRef = useRef(blocks); blocksRef.current = blocks;
   const ptrs = useRef(new Map<number, { x: number; y: number }>());
   const g = useRef<Gesture | null>(null);
+  const tap = useRef<string | null | undefined>(undefined);
   const [gesturing, setGesturing] = useState(false);
   const { cam: c, setFit } = cam;
 
-  // fit the whole floor to the width of the scene
+  // "fit": the blocks (or the whole floor while there are none) fill the scene
+  const extent = useMemo(() => {
+    if (!blocks.length) return null;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, hh = 0;
+    for (const b of blocks) { const f = footprint(b); x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + f.w); y1 = Math.max(y1, b.y + f.d); hh = Math.max(hh, b.h); }
+    return { x0, y0, x1, y1, hh };
+  }, [blocks]);
   useEffect(() => {
     const el = vp.current; if (!el) return;
-    const fit = () => setFit(Math.min(1.4, (el.clientWidth * 0.94) / (size * CELL * 1.38)));
+    const fit = () => {
+      const w = el.clientWidth, h = el.clientHeight;
+      if (!extent) { setFit(Math.min(1.4, (w * 0.94) / (size * CELL * 1.38)), 0, 0, false); return; }
+      const span = Math.max(extent.x1 - extent.x0, extent.y1 - extent.y0, 6) * CELL * 1.42;
+      const z = Math.min(2, (w * 0.86) / span, (h * 0.8) / (span * 0.6 + extent.hh * STEP_H));
+      setFit(z, ((extent.x0 + extent.x1) / 2) * CELL - (size * CELL) / 2, ((extent.y0 + extent.y1) / 2) * CELL - (size * CELL) / 2, true);
+    };
     fit();
     const ro = new ResizeObserver(fit); ro.observe(el);
     return () => ro.disconnect();
-  }, [size, setFit]);
+  }, [size, setFit, extent]);
 
   // the wheel zooms (a listener of our own: React's is passive and could not stop the page from scrolling)
   useEffect(() => {
@@ -60,6 +94,7 @@ export function Scene3D({ cam, size, blocks, selectedId, editable = false, info,
   }, [cam]);
 
   const down = (e: React.PointerEvent) => {
+    tap.current = undefined;
     ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     vp.current?.setPointerCapture(e.pointerId);
     setGesturing(true);
@@ -114,9 +149,11 @@ export function Scene3D({ cam, size, blocks, selectedId, editable = false, info,
     if (ptrs.current.size > 0) { if (s?.mode === 'pinch') g.current = null; return; }
     g.current = null; setGesturing(false);
     if (!s || s.mode === 'pinch') return;
-    if (s.mode === 'block') { if (s.moved && s.editable) onDragEnd?.(); else if (!s.moved && !editable) onTap?.(s.id); }
-    else if (!s.moved) onTap?.(null);
+    // a tap that opens a sheet is reported from the click that follows (opening it on pointer-up would put the sheet under that click and close it again)
+    if (s.mode === 'block') { if (s.moved && s.editable) onDragEnd?.(); else if (!s.moved && !editable) tap.current = s.id; }
+    else if (!s.moved) { if (editable) onTap?.(null); else tap.current = null; }
   };
+  const click = () => { const t = tap.current; tap.current = undefined; if (t !== undefined) onTap?.(t); };
 
   const keys = (e: React.KeyboardEvent) => {
     if (onKey?.(e)) { e.preventDefault(); return; }
@@ -130,16 +167,17 @@ export function Scene3D({ cam, size, blocks, selectedId, editable = false, info,
     e.preventDefault();
   };
 
-  const vars = { ...(height ? { height } : {}), '--f3-yaw': `${c.yaw}deg`, '--f3-pitch': `${c.pitch}deg`, '--f3-z': c.zoom, '--f3-px': `${c.px}px`, '--f3-py': `${c.py}px` } as CSSProperties;
+  const vars = { '--f3-yaw': `${c.yaw}deg`, '--f3-pitch': `${c.pitch}deg`, '--f3-z': c.zoom, '--f3-px': `${c.px}px`, '--f3-py': `${c.py}px` } as CSSProperties;
   const S = size * CELL;
   return (
-    <div ref={vp} className="f3-viewport" style={vars} data-gesture={gesturing || undefined} role="application" tabIndex={0} aria-label={`${label}. Arrow keys move the view, plus and minus zoom, shift with arrows turns and tilts.`}
-      onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onContextMenu={(e) => e.preventDefault()} onKeyDown={keys}>
+    <div ref={vp} className="f3-viewport" style={vars} data-gesture={gesturing || undefined} data-compact={compact || undefined} role="application" tabIndex={0} aria-label={`${label}. Arrow keys move the view, plus and minus zoom, shift with arrows turns and tilts.`}
+      onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onClick={click} onContextMenu={(e) => e.preventDefault()} onKeyDown={keys}>
       <div className="f3-world">
         <div className="f3-floor" style={{ left: -S / 2, top: -S / 2, width: S, height: S }}>
-          {blocks.map((b) => { const i = info?.get(b.id); return <Block3D key={b.id} b={b} selected={b.id === selectedId} editable={editable} badge={i?.badge} tone={i?.tone} hot={i?.hot} />; })}
+          {blocks.map((b) => { const i = info?.get(b.id); return <Block3D key={b.id} b={b} selected={b.id === selectedId} editable={editable} hot={i?.hot} />; })}
         </div>
       </div>
+      <Labels blocks={blocks} size={size} selectedId={selectedId} editable={editable} info={info} />
       {children}
     </div>
   );

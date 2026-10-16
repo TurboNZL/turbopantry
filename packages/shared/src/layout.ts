@@ -99,12 +99,16 @@ export function canPlace(blocks: Block[], b: Block, size: number): boolean {
   return !blocks.some((o) => o.id !== b.id && overlaps(o, b));
 }
 
-/** The first free spot (scanning row by row) where a box of this size fits, or null when the floor is full. */
-export function freeSpot(blocks: Block[], w: number, d: number, size: number, rot: Block['rot'] = 0): { x: number; y: number } | null {
+/** The free spot nearest to `near` (default the top-left corner, so a plain scan) where a box of this size fits, or null when the floor is full. */
+export function freeSpot(blocks: Block[], w: number, d: number, size: number, rot: Block['rot'] = 0, near: { x: number; y: number } = { x: 0, y: 0 }): { x: number; y: number } | null {
   const probe: Block = { id: '', kind: '', x: 0, y: 0, w, d, h: 1, rot, label: '', color: '' };
   const f = footprint(probe);
-  for (let y = 0; y + f.d <= size; y++) for (let x = 0; x + f.w <= size; x++) if (canPlace(blocks, { ...probe, x, y }, size)) return { x, y };
-  return null;
+  let best: { x: number; y: number } | null = null, bestDist = Infinity;
+  for (let y = 0; y + f.d <= size; y++) for (let x = 0; x + f.w <= size; x++) {
+    const dist = (x + f.w / 2 - near.x) ** 2 + (y + f.d / 2 - near.y) ** 2;
+    if (dist < bestDist && canPlace(blocks, { ...probe, x, y }, size)) { best = { x, y }; bestDist = dist; }
+  }
+  return best;
 }
 
 /** "Cupboard" -> "Cupboard 2" when the name is taken, so every place name is unique. */
@@ -116,9 +120,9 @@ export function uniqueLabel(blocks: Block[], label: string, exceptId?: string): 
   return label;
 }
 
-/** A new block from a preset, in the first free spot, or null when there is no room. */
-export function blockFromPreset(blocks: Block[], p: Preset, size: number): Block | null {
-  const spot = freeSpot(blocks, p.w, p.d, size);
+/** A new block from a preset, in the free spot nearest `near` (default the corner), or null when there is no room. */
+export function blockFromPreset(blocks: Block[], p: Preset, size: number, near?: { x: number; y: number }): Block | null {
+  const spot = freeSpot(blocks, p.w, p.d, size, 0, near);
   if (!spot) return null;
   const b: Block = { id: newId(), kind: p.kind, ...spot, w: p.w, d: p.d, h: p.h, rot: 0, label: uniqueLabel(blocks, p.label), color: p.color };
   if (p.groups) b.groups = [...p.groups];
