@@ -9,6 +9,7 @@ import { InstagramCard } from '../components/InstagramCard.tsx';
 import { ServerUpdateCard } from '../components/ServerUpdate.tsx';
 import { View3dCard } from '../components/View3dCard.tsx';
 import { ThemeUpdates } from '../components/ThemeUpdates.tsx';
+import { AppUpdatesCard } from '../components/AppUpdatesCard.tsx';
 import { ErrorBoundary } from '../components/ErrorBoundary.tsx';
 import { cn } from '../lib/cn.ts';
 
@@ -36,7 +37,7 @@ export function SettingsPage() {
       <ErrorBoundary key={tab} label={`The ${tab} tab`}>
       {tab === 'items' && <ItemsTab />}
       {tab === 'stores' && <StoresTab />}
-      {tab === 'server' && <><ServerUpdateCard /><ServerCard /><PairCard /><InstagramCard /></>}
+      {tab === 'server' && <><AppUpdatesCard /><ServerUpdateCard /><ServerCard /><PairCard /><InstagramCard /></>}
       {tab === 'guides' && <GuidesTab />}
       </ErrorBoundary>
     </div>
