@@ -85,6 +85,11 @@ export function Scene3D({ cam, size, blocks, selectedId, editable = false, info,
     return () => ro.disconnect();
   }, [size, setFit, extent]);
 
+  // blocks added (or removed) before anyone has touched the camera: fit again, so the first few blocks are not tiny
+  const count = blocks.length;
+  const { refit } = cam;
+  useEffect(() => { refit(); }, [count, refit]);
+
   // the wheel zooms (a listener of our own: React's is passive and could not stop the page from scrolling)
   useEffect(() => {
     const el = vp.current; if (!el) return;

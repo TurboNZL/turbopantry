@@ -24,6 +24,8 @@ export interface CameraApi {
   reset(): void;
   /** What "fit" means: this zoom, looking at this point of the floor (pixels from its centre). Set by the scene; `content` says whether blocks drive it. */
   setFit(z: number, cx: number, cy: number, content: boolean): void;
+  /** Fit again if the camera has not been touched yet (used when blocks are added, so the first blocks are not tiny). */
+  refit(): void;
   /** Always the latest camera, for event handlers. */
   ref: { current: Cam };
 }
@@ -51,6 +53,7 @@ export function useCamera(): CameraApi {
     setZoom: useCallback((z) => patch((c) => ({ ...c, zoom: clamp(z, MIN_ZOOM, MAX_ZOOM) })), [patch]),
     panBy: useCallback((dx, dy) => patch((c) => ({ ...c, px: clamp(c.px + dx, -1500, 1500), py: clamp(c.py + dy, -1500, 1500) })), [patch]),
     reset: useCallback(() => { touched.current = false; set(home()); }, [set, home]),
+    refit: useCallback(() => { if (!touched.current) set(home()); }, [set, home]),
     setFit: useCallback((z, cx, cy, content) => {
       fit.current = { z: clamp(z, MIN_ZOOM, MAX_ZOOM), cx, cy };
       if (stage.current === 0) { stage.current = content ? 2 : 1; set(home()); }

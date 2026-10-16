@@ -26,9 +26,9 @@ function GroupSheet({ block, onChange, onClose }: { block: Block; onChange(group
       {GROUP_SECTIONS.map((s) => (
         <div key={s.section} className="space-y-1">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">{s.section}</h3>
-          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+          <div className="grid grid-cols-2 gap-1">
             {s.groups.map((g) => (
-              <label key={g} className={cn('flex min-h-[2.75rem] cursor-pointer items-center gap-2 rounded-theme border px-3 text-sm', has.has(g) ? 'border-accent bg-accent/10' : 'border-line')}>
+              <label key={g} className={cn('flex min-h-[2.75rem] cursor-pointer items-center gap-2 rounded-theme border px-2 text-sm leading-tight', has.has(g) ? 'border-accent bg-accent/10' : 'border-line')}>
                 <input type="checkbox" checked={has.has(g)} onChange={() => toggle(g)} />{g}
               </label>
             ))}
