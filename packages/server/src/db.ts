@@ -101,6 +101,28 @@ const MIGRATIONS: string[] = [
      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
      last_used TEXT
    );`,
+  // items made only by linking a recipe are IN the pantry now (at none): `from_recipe` remembers where they came from, so "only in a recipe" can
+  // be filtered; recipe groups (collections of recipes); layouts (the faux-3D kitchen and shop maps: a block list as JSON)
+  `ALTER TABLE items ADD COLUMN from_recipe INTEGER NOT NULL DEFAULT 0;
+   UPDATE items SET from_recipe = 1, tracked = 1 WHERE tracked = 0;
+   CREATE TABLE recipe_groups (
+     id INTEGER PRIMARY KEY,
+     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+   );
+   CREATE TABLE recipe_group_members (
+     recipe_id INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+     group_id INTEGER NOT NULL REFERENCES recipe_groups(id) ON DELETE CASCADE,
+     PRIMARY KEY (recipe_id, group_id)
+   );
+   CREATE TABLE layouts (
+     id INTEGER PRIMARY KEY,
+     kind TEXT NOT NULL CHECK (kind IN ('pantry', 'store')),
+     store_id INTEGER REFERENCES stores(id) ON DELETE CASCADE,
+     data TEXT NOT NULL DEFAULT '{"blocks":[]}',
+     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+   );
+   CREATE UNIQUE INDEX layouts_one ON layouts (kind, ifnull(store_id, 0));`,
 ];
 
 export type Db = DatabaseSync;
