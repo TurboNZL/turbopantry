@@ -77,4 +77,22 @@ export class Api {
   instagramLogin(username: string, password: string) { return this.call<{ ok: true; username: string } | { needsCode: true; kind: 'sms' | 'app' }>('POST', '/api/admin/instagram/login', { username, password }); }
   instagramCode(code: string) { return this.call<{ ok: true; username: string }>('POST', '/api/admin/instagram/login/code', { code }); }
   instagramLogout() { return this.call<{ ok: true }>('POST', '/api/admin/instagram/logout', {}); }
+  // ---- the live login window (Instagram's own page, shown as JPEG frames; plain requests only, no WebSocket)
+  instagramLiveStart(view: { width: number; height: number; dpr: number }) { return this.call<{ id: string; w: number; h: number }>('POST', '/api/admin/instagram/live', view); }
+  instagramLiveStatus(id: string) { return this.call<InstagramLiveStatus>('GET', `/api/admin/instagram/live/status?id=${encodeURIComponent(id)}`); }
+  instagramLiveInput(id: string, events: InstagramLiveEvent[]) { return this.call<{ ok: true }>('POST', '/api/admin/instagram/live/input', { id, events }); }
+  instagramLiveCancel(id: string) { return this.call<InstagramLiveStatus>('POST', '/api/admin/instagram/live/cancel', { id }); }
+  /** The newest frame when it differs from `since` (waits on the server up to waitMs for a change). image: null = nothing new; closed = the window ended (ask the status). */
+  async instagramLiveFrame(id: string, since: number, waitMs: number, signal?: AbortSignal): Promise<{ seq: number; image: Blob | null; closed: boolean }> {
+    const headers: Record<string, string> = { ...accessHeaders(this.cfg) };
+    if (this.cfg.token) headers.authorization = `Bearer ${this.cfg.token}`;
+    const res = await fetch(`${this.cfg.serverUrl.replace(/\/+$/, '')}/api/admin/instagram/live/frame?id=${encodeURIComponent(id)}&since=${since}&wait=${waitMs}`, { headers, signal, cache: 'no-store' });
+    if (res.status === 410) return { seq: since, image: null, closed: true };
+    if (res.status === 204) return { seq: Number(res.headers.get('x-frame-seq') ?? since), image: null, closed: false };
+    if (!res.ok) { const data = (await res.json().catch(() => null)) as { error?: string; code?: string } | null; throw new ApiError(res.status, data?.error ?? `Server said ${res.status}`, data?.code); }
+    return { seq: Number(res.headers.get('x-frame-seq') ?? since), image: await res.blob(), closed: false };
+  }
 }
+
+export type InstagramLiveEvent = { type: 'tap'; x: number; y: number } | { type: 'wheel'; x: number; y: number; dx?: number; dy: number } | { type: 'key'; key: string } | { type: 'text'; text: string };
+export interface InstagramLiveStatus { id: string; state: 'open' | 'logged-in' | 'closed'; w: number; h: number; seq: number; reason?: string; username?: string; message: string; secondsLeft: number; seen?: string; notice?: string }

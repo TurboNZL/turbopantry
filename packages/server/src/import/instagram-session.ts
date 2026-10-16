@@ -64,6 +64,10 @@ export interface LiveStatus {
   /** why it is closed: cancelled, timeout, abandoned, error, failed (Instagram kept no login) or unknown (no such session) */
   reason?: 'cancelled' | 'timeout' | 'abandoned' | 'error' | 'failed' | 'unknown';
   username?: string; message: string; secondsLeft: number;
+  /** What the server's browser sees right now (page title, main-frame HTTP status, address without query, a short text excerpt; never cookies) so the owner can report a block. */
+  seen?: string;
+  /** A plain warning when the page looks blocked, blank or challenged. */
+  notice?: string;
 }
 export class LiveError extends Error {
   status: number; code: 'busy' | 'bad-input' | 'no-live' | 'rate' | 'no-browser' | 'failed';
@@ -99,14 +103,16 @@ export interface InstagramOptions {
   maxLoginsPer10Min?: number;
   /** How long to wait for Instagram to answer one step (default 30 s). */
   stepTimeoutMs?: number;
-  /** How long a login waits for the two-factor code (default 5 minutes). */
+  /** How long a login waits for the two-factor code (default 10 minutes). */
   codeWindowMs?: number;
-  /** Hard cap for one live login window (default 5 minutes). */
+  /** Hard cap for one live login window (default 10 minutes). */
   liveWindowMs?: number;
   /** The live window closes when nobody has asked for it for this long (default 3 minutes: long enough to fetch a code from another app). */
   liveIdleMs?: number;
   /** Time between two screenshots while the page is changing (default 350 ms, about 3 a second). */
   liveFrameMs?: number;
+  /** Inputs (taps, keys, texts, scrolls) allowed per 10 seconds (default 300). */
+  liveMaxEvents?: number;
 }
 
 interface SessionFile { v: 1; username: string; since: string; state: { cookies: unknown[]; origins: unknown[] } }
@@ -134,7 +140,7 @@ export function createInstagram(opts: InstagramOptions): InstagramService {
   const allowHost = opts.allowHost ?? INSTAGRAM_HOSTS;
   const maxReads = opts.maxReadsPerMinute ?? 4, minGap = opts.minGapMs ?? 4000, maxLogins = opts.maxLoginsPer10Min ?? 5;
   const stepMs = opts.stepTimeoutMs ?? 30_000, codeWindow = opts.codeWindowMs ?? 5 * 60_000;
-  const liveWindow = opts.liveWindowMs ?? 5 * 60_000, liveIdle = opts.liveIdleMs ?? 3 * 60_000, frameMs = opts.liveFrameMs ?? 350;
+  const liveWindow = opts.liveWindowMs ?? 10 * 60_000, liveIdle = opts.liveIdleMs ?? 3 * 60_000, frameMs = opts.liveFrameMs ?? 350, maxEvents = opts.liveMaxEvents ?? 300;
   const launch = (storageState?: SessionFile['state'], extra: Partial<Parameters<typeof openLockedBrowser>[0]> = {}): Promise<LockedBrowser> =>
     openLockedBrowser({ allowHost, executablePath: opts.executablePath, noSandbox: opts.noSandbox, storageState: storageState as never, purpose: 'Instagram imports', plainUserAgent: true, ...extra });
 
@@ -368,7 +374,7 @@ export function createInstagram(opts: InstagramOptions): InstagramService {
     id: string; lb: LockedBrowser; release: () => void; w: number; h: number; dpr: number;
     seq: number; frame: Buffer | null; state: LiveStatus['state']; reason?: LiveStatus['reason']; message: string; username: string;
     deadline: number; lastSeen: number; lastFrameAsk: number; lastChange: number; timer: NodeJS.Timeout;
-    pages: Page[]; internal: Page | null; waiters: (() => void)[]; poke: (() => void) | null; inputs: number[]; tries: number; nextCheck: number; closing: boolean;
+    done: Promise<void>; finish: () => void; seen: string; notice: string; mainStatus: number; since: number; lastProbe: number; pages: Page[]; internal: Page | null; waiters: (() => void)[]; poke: (() => void) | null; inputs: number[]; tries: number; nextCheck: number; closing: boolean;
   }
   let live: Live | null = null; // the current window, or the last finished one (so a late status call still gets its answer)
   const MSG_WAIT = 'Waiting for you to log in…';
@@ -384,6 +390,7 @@ export function createInstagram(opts: InstagramOptions): InstagramService {
     wake(l); l.poke?.();
     await l.lb.browser.close().catch(() => undefined);
     l.release();
+    l.finish();
   }
 
   async function captureLive(l: Live) {
@@ -428,14 +435,34 @@ export function createInstagram(opts: InstagramOptions): InstagramService {
     } finally { l.internal = null; await p2?.close().catch(() => undefined); }
   }
 
+  /** Looks at the page like a person would and writes down what it saw. Every 2 s at most. */
+  async function probeLive(l: Live) {
+    if (Date.now() - l.lastProbe < 2000) return;
+    l.lastProbe = Date.now();
+    const page = livePage(l); if (!page) return;
+    try {
+      const title = (await page.title().catch(() => '')).slice(0, 80);
+      const text = (await bodyText(page)).replace(/\s+/g, ' ').trim();
+      let where = ''; try { const u = new URL(page.url()); where = u.host + u.pathname; } catch { /* about:blank */ }
+      l.seen = `Page "${title}" at ${where} · HTTP ${l.mainStatus || '?'} · ${text ? `text: "${text.slice(0, 160)}${text.length > 160 ? '…' : ''}"` : 'no text on the page'}`;
+      const notes: string[] = [];
+      if (l.mainStatus >= 400) notes.push(`Instagram answered with HTTP ${l.mainStatus}.`);
+      if (!text && Date.now() - l.since > 10_000) notes.push('The page is still blank after 10 seconds. Instagram may be refusing this server\'s browser.');
+      if (RE_BLOCKED.test(text)) notes.push('Instagram says to wait or try again later. Cancel, wait an hour or two, then try once more.');
+      else if (RE_CHALLENGE.test(text) || /\/challenge\b/.test(page.url())) notes.push('Instagram is asking you to confirm it is you: finish it in this window (or approve it in the account\'s own app).');
+      l.notice = notes.join(' ');
+    } catch { /* mid-navigation */ }
+  }
+
   async function liveLoop(l: Live) {
     while (l.state === 'open' && !l.closing) {
       const now = Date.now();
-      if (now > l.deadline) { await endLive(l, 'closed', 'timeout', 'The login window was open for 5 minutes and was closed. Open it again to try once more.'); return; }
+      if (now > l.deadline) { await endLive(l, 'closed', 'timeout', 'The login window was open for 10 minutes and was closed. Open it again to try once more.'); return; }
       if (now - l.lastSeen > liveIdle) { await endLive(l, 'closed', 'abandoned', 'The login window was closed because nobody was looking at it.'); return; }
       try {
         if (now >= l.nextCheck && (await hasSession(l.lb.context))) { await checkLiveSession(l); if (l.state !== 'open') return; }
       } catch { /* the page is changing */ }
+      await probeLive(l);
       if (l.frame === null || now - l.lastFrameAsk < 20_000) await captureLive(l);
       const idleFor = Date.now() - l.lastChange;
       await Promise.race([sleep(idleFor > 5000 ? 1000 : frameMs), new Promise<void>((r) => { l.poke = r; })]);
@@ -449,6 +476,7 @@ export function createInstagram(opts: InstagramOptions): InstagramService {
     const width = Math.round(Math.min(w, 1280)), height = Math.round(Math.min(h, 1800));
     const dpr = Math.min(2, Math.max(1, num(view?.dpr, 0.5, 8) ?? 1));
     await closePending();
+    if (live?.closing) await live.done; // a window that just finished is still closing its browser
     if (live?.state === 'open' || holders > 0) throw new LiveError(409, 'busy', 'Instagram is busy with another login or import. Wait a moment and try again, or cancel the window that is open.');
     if (recent(logins, 10 * 60_000) >= maxLogins) throw new LiveError(429, 'rate', 'Too many login attempts in a short time. Wait ten minutes: repeated logins are what makes Instagram restrict an account.');
     logins.push(Date.now());
@@ -462,15 +490,18 @@ export function createInstagram(opts: InstagramOptions): InstagramService {
       const l: Live = {
         id: randomBytes(12).toString('hex'), lb, release, w: width, h: height, dpr, seq: 0, frame: null, state: 'open', message: MSG_WAIT, username: '',
         deadline: Date.now() + liveWindow, lastSeen: Date.now(), lastFrameAsk: Date.now(), lastChange: Date.now(), timer: undefined as never,
-        pages: [page], internal: null, waiters: [], poke: null, inputs: [], tries: 0, nextCheck: 0, closing: false,
+        done: undefined as never, finish: undefined as never, seen: '', notice: '', mainStatus: 0, since: Date.now(), lastProbe: 0, pages: [page], internal: null, waiters: [], poke: null, inputs: [], tries: 0, nextCheck: 0, closing: false,
       };
       made = l;
-      l.timer = setTimeout(() => { void endLive(l, 'closed', 'timeout', 'The login window was open for 5 minutes and was closed. Open it again to try once more.'); }, liveWindow);
+      l.done = new Promise<void>((r) => { l.finish = r; });
+      l.timer = setTimeout(() => { void endLive(l, 'closed', 'timeout', 'The login window was open for 10 minutes and was closed. Open it again to try once more.'); }, liveWindow);
       l.timer.unref?.();
       // remember what is typed in the USERNAME box (never the password) so the saved session can say whose it is
       await lb.context.exposeFunction('__tpUser', (v: unknown) => { if (typeof v === 'string' && v.length > 0 && v.length <= 128) l.username = v; });
       await lb.context.addInitScript(`document.addEventListener('input', function (e) { var t = e.target; if (t && t.tagName === 'INPUT' && t.type !== 'password' && /^(username|email)$/.test(t.name || '') && typeof window.__tpUser === 'function') window.__tpUser(String(t.value)); }, true);`);
-      lb.context.on('page', (np) => { if (np === l.internal) return; l.pages.push(np); np.setDefaultTimeout(stepMs); np.on('dialog', (d) => { void d.dismiss().catch(() => undefined); }); });
+      const watch = (pg: Page) => { pg.on('response', (r) => { try { if (r.request().isNavigationRequest() && r.frame() === pg.mainFrame()) l.mainStatus = r.status(); } catch { /* closing */ } }); };
+      watch(page);
+      lb.context.on('page', (np) => { if (np === l.internal) return; watch(np); l.pages.push(np); np.setDefaultTimeout(stepMs); np.on('dialog', (d) => { void d.dismiss().catch(() => undefined); }); });
       page.on('dialog', (d) => { void d.dismiss().catch(() => undefined); });
       lb.browser.on('disconnected', () => { void endLive(l, 'closed', 'error', 'The browser on the server stopped.'); });
       await page.goto(`${base}/accounts/login/`, { waitUntil: 'domcontentloaded', timeout: stepMs }).catch(() => { throw new LiveError(502, 'failed', 'The Instagram login page did not open. Instagram may be slow, or may be refusing this server.'); });
@@ -489,7 +520,7 @@ export function createInstagram(opts: InstagramOptions): InstagramService {
     if (!live || live.id !== id) throw new LiveError(404, 'no-live', 'That login window is not open any more.');
     return live;
   };
-  const statusOf = (l: Live): LiveStatus => ({ id: l.id, state: l.state, w: l.w, h: l.h, seq: l.seq, ...(l.reason ? { reason: l.reason } : {}), ...(l.username && l.state === 'logged-in' ? { username: l.username } : {}), message: l.message, secondsLeft: l.state === 'open' ? Math.max(0, Math.round((l.deadline - Date.now()) / 1000)) : 0 });
+  const statusOf = (l: Live): LiveStatus => ({ id: l.id, state: l.state, w: l.w, h: l.h, seq: l.seq, ...(l.reason ? { reason: l.reason } : {}), ...(l.username && l.state === 'logged-in' ? { username: l.username } : {}), message: l.message, ...(l.seen ? { seen: l.seen } : {}), ...(l.notice && l.state === 'open' ? { notice: l.notice } : {}), secondsLeft: l.state === 'open' ? Math.max(0, Math.round((l.deadline - Date.now()) / 1000)) : 0 });
 
   async function liveFrame(id: string, since: number, waitMs = 0) {
     const l = current(id);
@@ -508,7 +539,7 @@ export function createInstagram(opts: InstagramOptions): InstagramService {
     const l = current(id);
     if (l.state !== 'open') throw new LiveError(404, 'no-live', 'That login window is not open any more.');
     if (!Array.isArray(events) || events.length === 0 || events.length > 50) throw new LiveError(400, 'bad-input', 'Send between 1 and 50 events at a time.');
-    if (recent(l.inputs, 10_000) + events.length > 300) throw new LiveError(429, 'rate', 'Too many inputs. Slow down.');
+    if (recent(l.inputs, 10_000) + events.length > maxEvents) throw new LiveError(429, 'rate', 'Too many inputs. Slow down.');
     // validate everything before touching the page: all or nothing
     const todo: LiveEvent[] = [];
     for (const raw of events) {
