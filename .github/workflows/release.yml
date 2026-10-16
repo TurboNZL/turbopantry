@@ -2,7 +2,8 @@
 # The version is the year, the month and a counter: v2026.10.0, v2026.10.1, ... (the counter restarts each month).
 # Documentation-only changes do not release. "Run workflow" in the Actions tab releases the current main on demand.
 # The server is not a release asset: it installs from a git checkout (scripts/install-pi.sh) and updates itself from main (scripts/update.sh),
-# like every TurboNZL server (turboengine module server-install-update). The Android APK job (module release-pipeline) joins when apps/android exists.
+# like every TurboNZL server (turboengine module server-install-update). The Android app (apps/android) is the release's one asset:
+# turbopantry-<version>-android.apk, which the installed app finds and installs itself (AppUpdater).
 name: Release
 on:
   push:
@@ -33,3 +34,44 @@ jobs:
       - name: Create the release (this also creates the tag)
         run: gh release create "${{ steps.next.outputs.tag }}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "${{ steps.next.outputs.tag }}" --generate-notes
         env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+
+  android:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.9' }
+      - run: pnpm install --frozen-lockfile --ignore-scripts --filter @turbopantry/web --filter @turbopantry/shared
+      - run: pnpm --filter @turbopantry/web build
+      # The owner's own signing key, when the repository has the secrets (Settings > Secrets and variables > Actions):
+      #   ANDROID_KEYSTORE_BASE64 (base64 -w0 of the .keystore), ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD.
+      # Without them the build is signed with the key committed in apps/android/turbopantry.keystore (as the engine's android-shell does),
+      # which keeps self-updates working. Android only installs an update signed with the same key as the installed app.
+      - name: Use the signing key from the secrets (if any)
+        env: { KEYSTORE_BASE64: '${{ secrets.ANDROID_KEYSTORE_BASE64 }}' }
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "TURBOPANTRY_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+            echo "Signing with the key from the secrets"
+          else
+            echo "No signing secrets: signing with the committed key"
+          fi
+      - name: Build the APK
+        run: |
+          TAG='${{ needs.release.outputs.tag }}'
+          VERSION="${TAG#v}"
+          gradle -p apps/android :app:assembleRelease -PappVersion="$VERSION"
+          cp apps/android/app/build/outputs/apk/release/app-release.apk "turbopantry-$VERSION-android.apk"
+          gh release upload "$TAG" "turbopantry-$VERSION-android.apk" --clobber
+        env:
+          GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+          TURBOPANTRY_KEYSTORE_PASSWORD: '${{ secrets.ANDROID_KEYSTORE_PASSWORD }}'
+          TURBOPANTRY_KEY_ALIAS: '${{ secrets.ANDROID_KEY_ALIAS }}'
+          TURBOPANTRY_KEY_PASSWORD: '${{ secrets.ANDROID_KEY_PASSWORD }}'

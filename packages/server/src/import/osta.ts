@@ -48,6 +48,17 @@ export function parseOstaPage(html: string, pageUrl: string): OstaDraft | null {
   }
   if (!items.length) return null;
 
+  // the method: a "Directions" heading, then per step a number (h2) and its text (subtitle3). The page repeats the block for the other screen
+  // size, so only the first heading is read. Seen on a saved page of a recipe with a method (fixture osta-share-page-with-method.html).
+  const steps: string[] = [];
+  const dirs = h3s.find((p) => /^(directions|method|instructions|steps)$/i.test(clean(p.text)));
+  const dirBox = dirs?.parentNode as HTMLElement | undefined;
+  if (dirBox) for (const row of dirBox.querySelectorAll('div')) {
+    const kids = row.querySelectorAll('p').filter((p) => p.parentNode === row);
+    const text = kids.find((p) => has(p, 'MuiTypography-subtitle3'));
+    if (text && kids.some((p) => has(p, 'MuiTypography-h2'))) { const t = clean(text.text); if (t) steps.push(t); }
+  }
+
   const body1 = ps(root, 'MuiTypography-body1').map((p) => clean(p.text));
   const timeOf = (label: string) => { const t = body1.find((b) => new RegExp(`^${label}\\s*:`, 'i').test(b)); return t ? parseMinutes(t.replace(/^[^:]*:\s*/, '')) : null; };
   const prep = timeOf('prep') || null, cook = timeOf('cook') || null; // "0 min" means not given
@@ -69,9 +80,9 @@ export function parseOstaPage(html: string, pageUrl: string): OstaDraft | null {
     recipe: {
       title, description, imageUrl: photo, sourceUrl: pageUrl, sourceName: creator ? `Osta (${creator})` : 'Osta',
       servings, prepMinutes: prep, cookMinutes: cook, totalMinutes: prep !== null && cook !== null ? prep + cook : null,
-      ingredients: items, steps: [], tags: [], notes: '',
+      ingredients: items, steps, tags: [], notes: '',
     },
-    warnings: [alternative
+    warnings: steps.length ? [] : [alternative
       ? `This recipe came from ${alternative.label}. Importing from there is usually cleaner and includes the method.`
       : 'No method was found on this Osta page. Add it yourself in the Method box (the original video or post is the best source).'],
     ...(alternative ? { alternative } : {}),

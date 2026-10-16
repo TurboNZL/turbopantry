@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { GROUPS, guessCategory } from '@turbopantry/shared';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 
 /** Each entry runs once, in order; the index + 1 is stored in PRAGMA user_version. Never edit an entry that has shipped: add a new one. */
@@ -80,6 +81,26 @@ const MIGRATIONS: string[] = [
      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
    );
    CREATE INDEX stock_log_item ON stock_log (item_id, created_at);`,
+  // one list and one pantry: how an item is counted (amounts / weight in chunks / weight), "always have" removed, a list line can say that buying it
+  // leaves the pantry count alone, shop layouts (the order of the shopping groups), and a token per device so a lost one is simply replaced
+  `ALTER TABLE items DROP COLUMN staple;
+   ALTER TABLE items ADD COLUMN count_mode TEXT NOT NULL DEFAULT 'weight';
+   UPDATE items SET count_mode = CASE WHEN unit IS NULL OR unit NOT IN ('g','kg','ml','l') THEN 'amount' ELSE 'weight' END;
+   ALTER TABLE list_items ADD COLUMN adds_stock INTEGER NOT NULL DEFAULT 1;
+   CREATE TABLE stores (
+     id INTEGER PRIMARY KEY,
+     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+     group_order TEXT NOT NULL DEFAULT '[]',
+     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+   );
+   CREATE TABLE device_tokens (
+     id INTEGER PRIMARY KEY,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     token_hash TEXT NOT NULL UNIQUE,
+     label TEXT NOT NULL DEFAULT '',
+     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+     last_used TEXT
+   );`,
 ];
 
 export type Db = DatabaseSync;
@@ -94,7 +115,17 @@ export function openDb(file: string): Db {
     try { db.exec(MIGRATIONS[v]!); db.exec(`PRAGMA user_version = ${v + 1}`); db.exec('COMMIT'); }
     catch (e) { db.exec('ROLLBACK'); throw e; }
   }
+  regroup(db);
   return db;
+}
+
+/** The shopping groups became precise (Vegetables, Cheese ... instead of Produce, Dairy): items and lines still carrying an old broad name get a fresh guess. Does nothing once they are all current. */
+function regroup(db: Db) {
+  for (const table of ['items', 'list_items']) {
+    const rows = db.prepare(`SELECT id, name, category FROM ${table}`).all() as { id: number; name: string; category: string }[];
+    const set = db.prepare(`UPDATE ${table} SET category = ? WHERE id = ?`);
+    for (const r of rows) if (!GROUPS.includes(r.category)) set.run(guessCategory(r.name), r.id);
+  }
 }
 
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -104,7 +135,7 @@ export function addUser(db: Db, name: string): string {
   const clean = name.trim();
   if (!clean) throw new Error('A user needs a name.');
   const first = countUsers(db) === 0;
-  const token = `tp_${randomBytes(24).toString('base64url')}`;
+  const token = newToken();
   db.prepare('INSERT INTO users (name, token_hash, is_admin) VALUES (?, ?, ?)').run(clean, hash(token), first ? 1 : 0);
   return token;
 }
@@ -115,12 +146,36 @@ export const listUsers = (db: Db): User[] => (db.prepare('SELECT id, name, is_ad
 
 export function userForToken(db: Db, token: string): User | null {
   const want = Buffer.from(hash(token));
+  const same = (h: string) => { const have = Buffer.from(h); return have.length === want.length && timingSafeEqual(have, want); };
   const rows = db.prepare('SELECT id, name, token_hash, is_admin FROM users').all() as { id: number; name: string; token_hash: string; is_admin: number }[];
-  for (const r of rows) {
-    const have = Buffer.from(r.token_hash);
-    if (have.length === want.length && timingSafeEqual(have, want)) return { id: r.id, name: r.name, isAdmin: !!r.is_admin };
+  for (const r of rows) if (same(r.token_hash)) return { id: r.id, name: r.name, isAdmin: !!r.is_admin };
+  const dev = db.prepare('SELECT d.id AS did, d.token_hash, u.id, u.name, u.is_admin FROM device_tokens d JOIN users u ON u.id = d.user_id').all() as { did: number; token_hash: string; id: number; name: string; is_admin: number }[];
+  for (const r of dev) if (same(r.token_hash)) {
+    db.prepare("UPDATE device_tokens SET last_used = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(r.did);
+    return { id: r.id, name: r.name, isAdmin: !!r.is_admin };
   }
   return null;
+}
+
+const newToken = () => `tp_${randomBytes(24).toString('base64url')}`;
+
+export interface DeviceToken { id: number; label: string; createdAt: string; lastUsed: string | null }
+
+/** Makes another token for an account (one per phone or computer, named). Shown once; only its hash is kept. A lost one is revoked and replaced, the account never needs remaking. */
+export function addDeviceToken(db: Db, userId: number, label: string): string {
+  const token = newToken();
+  db.prepare('INSERT INTO device_tokens (user_id, token_hash, label) VALUES (?, ?, ?)').run(userId, hash(token), label.trim().slice(0, 60));
+  return token;
+}
+export const listDeviceTokens = (db: Db, userId: number): DeviceToken[] =>
+  (db.prepare('SELECT id, label, created_at, last_used FROM device_tokens WHERE user_id = ? ORDER BY id').all(userId) as { id: number; label: string; created_at: string; last_used: string | null }[])
+    .map((r) => ({ id: r.id, label: r.label, createdAt: r.created_at, lastUsed: r.last_used }));
+export const revokeDeviceToken = (db: Db, userId: number, id: number): boolean => db.prepare('DELETE FROM device_tokens WHERE id = ? AND user_id = ?').run(id, userId).changes > 0;
+
+/** Owner recovery from the server's own shell: replaces an account's main token (the old one stops working) and prints the new one. */
+export function resetUserToken(db: Db, name: string): string | null {
+  const token = newToken();
+  return db.prepare('UPDATE users SET token_hash = ? WHERE name = ?').run(hash(token), name.trim()).changes ? token : null;
 }
 
 export const countUsers = (db: Db) => (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;

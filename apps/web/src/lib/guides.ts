@@ -9,7 +9,7 @@ export interface Guide { name: string; title: string; group: 'Start' | 'Apps' | 
 
 const TITLE: Record<string, [string, Guide['group']]> = {
   GETTING_STARTED: ['Getting started', 'Start'], IMPORTING: ['Importing recipes', 'Start'], PANTRY: ['Pantry and shopping', 'Start'], README: ['About TurboPantry', 'Start'],
-  SELF_HOSTING: ['Self-hosting', 'Servers'], UPDATING: ['Updating the server', 'Servers'], CLOUDFLARE_TUNNEL: ['Reaching it from outside (Cloudflare Tunnel)', 'Servers'],
+  ANDROID: ['The Android app', 'Apps'], SELF_HOSTING: ['Self-hosting', 'Servers'], UPDATING: ['Updating the server', 'Servers'], CLOUDFLARE_TUNNEL: ['Reaching it from outside (Cloudflare Tunnel)', 'Servers'],
 };
 const ORDER = Object.keys(TITLE);
 

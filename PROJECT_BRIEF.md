@@ -53,8 +53,8 @@ Planned, same shape as Curator: pnpm monorepo. `packages/server` (Node 22, `node
 1. Scaffold + release pipeline: a merge to main produces a tagged release. Done when a release exists with the web build.
 2. Recipes CRUD + website import: done when 10 varied real recipe URLs import with correct ingredients and steps.
 3. **DONE (first version, 2026-10-15; the owner iterates on it).** **Stock + shopping list together** (they share the item model), mobile first: stock items with quantities and units, recipe-vs-stock status, add-the-shortfall-to-the-list, categories, live sync. Done when: a phone-width run adds a recipe's missing ingredients in at most 3 taps with in-stock items skipped; ticking bought items updates stock; two logged-in browsers see each other's changes through the tunnel.
-4. Instagram import: done when 10 real food posts/reels import (or fail cleanly to paste) from the user's server.
-5. Android shell + share-sheet + updater.
+4. Instagram import: **built (2026-10-16), unproven on live Instagram.** Done when 10 real food posts/reels import (or fail cleanly to paste) from the user's server.
+5. Android shell + share-sheet + updater: **built (2026-10-16), first CI build pending.**
 6. Meal plan, video transcript, polish.
 
 ## Glossary

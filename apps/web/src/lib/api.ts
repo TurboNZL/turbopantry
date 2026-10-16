@@ -1,4 +1,4 @@
-import type { Health, ImportDraft, ImportError, Item, ListEntry, Recipe, RecipeInput, RecipeSummary, ServerUpdate, Status } from '@turbopantry/shared';
+import type { Health, ImportDraft, ImportError, Item, ListEntry, Store, Recipe, RecipeInput, RecipeSummary, ServerUpdate, Status } from '@turbopantry/shared';
 
 export interface ApiConfig { serverUrl: string; token: string; cfAccessId?: string; cfAccessSecret?: string }
 
@@ -41,7 +41,7 @@ export class Api {
   deleteItem(id: number) { return this.call<{ ok: true }>('DELETE', `/api/items/${id}`); }
   adjustStock(changes: { itemId: number; delta: number }[], reason = 'manual', recipeId?: number) { return this.call<{ items: Item[]; applied: { itemId: number; delta: number }[] }>('POST', '/api/stock/adjust', { changes, reason, recipeId }); }
   listEntries() { return this.call<ListEntry[]>('GET', '/api/list'); }
-  addToList(body: { itemId?: number; name?: string; qty?: number | null; unit?: string | null; note?: string }) { return this.call<ListEntry>('POST', '/api/list', body); }
+  addToList(body: { itemId?: number; name?: string; qty?: number | null; unit?: string | null; note?: string; stock?: 'more' | 'out' | 'keep' }) { return this.call<ListEntry>('POST', '/api/list', body); }
   updateEntry(id: number, patch: { qty?: number | null; note?: string; checked?: boolean }) { return this.call<{ entry: ListEntry; stock: { itemId: number; delta: number } | null }>('PUT', `/api/list/${id}`, patch); }
   deleteEntry(id: number) { return this.call<{ ok: true }>('DELETE', `/api/list/${id}`); }
   clearChecked() { return this.call<{ removed: number }>('POST', '/api/list/clear-checked'); }
@@ -49,4 +49,17 @@ export class Api {
   /** The address and headers of the live-update stream. */
   eventsRequest() { return { url: `${this.cfg.serverUrl.replace(/\/+$/, '')}/api/events`, headers: { ...(this.cfg.token ? { authorization: `Bearer ${this.cfg.token}` } : {}), ...accessHeaders(this.cfg) } as Record<string, string> }; }
   importUrl(url: string) { return this.call<ImportDraft>('POST', '/api/import', { url }); }
+  /** A pasted caption (and comments) from a post, with its link if known. */
+  importText(text: string, comments: string[] = [], url?: string) { return this.call<ImportDraft>('POST', '/api/import', { text, comments, url }); }
+  // ---- shop layouts and paired devices
+  listStores() { return this.call<Store[]>('GET', '/api/stores'); }
+  createStore(name: string, order: string[] = []) { return this.call<Store>('POST', '/api/stores', { name, order }); }
+  updateStore(id: number, patch: { name?: string; order?: string[] }) { return this.call<Store>('PUT', `/api/stores/${id}`, patch); }
+  deleteStore(id: number) { return this.call<{ ok: true }>('DELETE', `/api/stores/${id}`); }
+  listDevices() { return this.call<{ id: number; label: string; createdAt: string; lastUsed: string | null }[]>('GET', '/api/devices'); }
+  /** A new token for another device of this account (shown once). */
+  pairDevice(label: string) { return this.call<{ token: string }>('POST', '/api/devices', { label }); }
+  revokeDevice(id: number) { return this.call<{ ok: true }>('DELETE', `/api/devices/${id}`); }
+  /** Where a picture saved on the server lives (its path starts with /images/); other addresses are used as they are. */
+  pictureUrl(u: string) { return u.startsWith('/images/') ? `${this.cfg.serverUrl.replace(/\/+$/, '')}${u}` : u; }
 }

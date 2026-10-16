@@ -1,5 +1,6 @@
 import type { Ingredient, Recipe, RecipeInput, RecipeSummary } from '@turbopantry/shared';
 import type { Db } from './db.ts';
+import { IMAGE_PATH } from './images.ts';
 
 interface Row {
   id: number; title: string; description: string; image_url: string | null; source_url: string | null; source_name: string | null;
@@ -39,7 +40,8 @@ export function validateRecipe(body: unknown): RecipeInput | string {
   const steps = b.steps.map((s) => str(s, 4000)).filter(Boolean);
   const tags = Array.isArray(b.tags) ? [...new Set(b.tags.map((t) => str(t, 40).toLowerCase()).filter(Boolean))].slice(0, 30) : [];
   return {
-    title, description: str(b.description, 5000), imageUrl: optHttp(b.imageUrl), sourceUrl: optHttp(b.sourceUrl), sourceName: optStr(b.sourceName, 100),
+    title, description: str(b.description, 5000), imageUrl: typeof b.imageUrl === 'string' && IMAGE_PATH.test(b.imageUrl) ? b.imageUrl : optHttp(b.imageUrl), // a photo already saved on this server keeps its path
+     sourceUrl: optHttp(b.sourceUrl), sourceName: optStr(b.sourceName, 100),
     servings: optNum(b.servings, 10000), prepMinutes: optNum(b.prepMinutes, 100000), cookMinutes: optNum(b.cookMinutes, 100000), totalMinutes: optNum(b.totalMinutes, 100000),
     ingredients, steps, tags, notes: str(b.notes, 10000),
   };

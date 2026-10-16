@@ -8,6 +8,7 @@ import { useStore } from '../lib/store.ts';
 import { useListEntries } from '../lib/data.ts';
 import { useLiveConnection } from '../lib/live.ts';
 import { Toasts } from './Toasts.tsx';
+import { ContextMenuHost } from '../lib/contextMenu.tsx';
 
 const NAV = [
   { to: '/recipes', label: 'Recipes', icon: BookOpen },
@@ -113,6 +114,7 @@ export function Layout() {
         ))}
       </nav>
       <Toasts />
+      <ContextMenuHost />
     </div>
   );
 }

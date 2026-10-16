@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Check, ShoppingCart } from 'lucide-react';
-import { fineStep, prettyStock, stockStatus, type Ingredient, type Item, type Recipe } from '@turbopantry/shared';
+import { fineStep, prettyStock, stockStatus, type Ingredient, type Item, type Recipe, titleCase } from '@turbopantry/shared';
 import { Sheet } from './Sheet.tsx';
 import { Stepper } from './Stepper.tsx';
 import { toast } from '../lib/toast.ts';
@@ -17,7 +17,7 @@ export function CookSheet({ recipe, factor, byId, onClose }: { recipe: Recipe; f
   const api = useApi();
   const initial = useMemo<Line[]>(() => recipe.ingredients.flatMap((ing, index) => {
     const item = ing.itemId ? byId.get(ing.itemId) : undefined;
-    if (!item || item.staple) return [];
+    if (!item) return [];
     const st = stockStatus(ing, factor, item);
     if (st.need === null) return [];
     const use = Math.round(Math.min(st.need, item.qty) * 1000) / 1000;
@@ -39,10 +39,10 @@ export function CookSheet({ recipe, factor, byId, onClose }: { recipe: Recipe; f
       const r = await api.adjustStock(changes, 'cooked', recipe.id);
       const used = r.applied.map((a) => ({ itemId: a.itemId, delta: -a.delta })).filter((a) => a.delta !== 0);
       setUndo(used);
-      setDone(r.items.filter((i) => i.tracked && !i.staple && i.minQty > 0 && i.qty <= i.minQty));
+      setDone(r.items.filter((i) => i.tracked && i.minQty > 0 && i.qty <= i.minQty));
     } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   }
-  async function toList(it: Item) { try { await api.addToList({ itemId: it.id }); toast(`Added ${it.name} to the list`); setDone((d) => (d ?? []).filter((x) => x.id !== it.id)); } catch (e) { toast((e as Error).message); } }
+  async function toList(it: Item) { try { await api.addToList({ itemId: it.id }); toast(`Added ${titleCase(it.name)} to the list`); setDone((d) => (d ?? []).filter((x) => x.id !== it.id)); } catch (e) { toast((e as Error).message); } }
 
   if (done) return (
     <Sheet title="Done" onClose={onClose} footer={<button className="btn btn-accent h-11 w-full" onClick={onClose}>Close</button>}>
@@ -59,8 +59,8 @@ export function CookSheet({ recipe, factor, byId, onClose }: { recipe: Recipe; f
         {lines.map((l, i) => (
           <div key={l.index} className="flex min-h-[3.5rem] items-center gap-3 py-1">
             <label className="flex min-w-0 flex-1 items-center gap-3"><input type="checkbox" className="h-5 w-5 shrink-0" checked={l.on} onChange={(e) => patch(i, { on: e.target.checked })} aria-label={`Used ${l.item.name}`} />
-              <span className="min-w-0"><span className="block truncate font-medium">{l.item.name}</span><span className="block text-xs text-muted">have {prettyStock(l.item.qty, l.item.unit)}</span></span></label>
-            {l.on && <Stepper label={l.item.name} value={l.use} step={fineStep(l.item.unit)} unit={l.item.unit} max={l.item.qty} onChange={(v) => patch(i, { use: v })} />}
+              <span className="min-w-0"><span className="block truncate font-medium">{titleCase(l.item.name)}</span><span className="block text-xs text-muted">have {prettyStock(l.item.qty, l.item.unit)}</span></span></label>
+            {l.on && <Stepper label={titleCase(l.item.name)} value={l.use} step={fineStep(l.item.unit)} unit={l.item.unit} max={l.item.qty} onChange={(v) => patch(i, { use: v })} />}
           </div>
         ))}
       </div>

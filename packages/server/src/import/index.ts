@@ -2,6 +2,7 @@ import type { ImportDraft, ImportError } from '@turbopantry/shared';
 import { FetchError, safeFetchPage, type PageFetcher } from './safeFetch.ts';
 import { extractFromJsonLd } from './jsonld.ts';
 import type { PageRenderer } from './browser.ts';
+import { fromText, importInstagram, isInstagramUrl } from './instagram.ts';
 import { isOstaRecipeUrl, isOstaUrl, OSTA_READY_TEXT, parseOstaPage } from './osta.ts';
 
 export type ImportResult = ImportDraft | ImportError;
@@ -13,12 +14,12 @@ const host = (u: string) => { try { return new URL(u).hostname.toLowerCase().rep
 /**
  * Turns a link into a recipe DRAFT (nothing is saved here; the user reviews it first). Sources are tried by address:
  *   ostarecipes.com   rendered in a headless browser, then read by osta.ts (ingredients only: the page has no method)
- *   instagram.com     not built yet (needs the caption and comments; see CLAUDE.md)
+ *   instagram.com     the caption and comments from the public embed page (instagram.ts); when Instagram hides them, the paste box (importFromText)
  *   websites          schema.org Recipe JSON-LD (most recipe sites)
  */
 export async function importFromUrl(url: string, { fetchPage = safeFetchPage, render }: Importers = {}): Promise<ImportResult> {
   const h = host(url);
-  if (h === 'instagram.com' || h.endsWith('.instagram.com')) return { code: 'unsupported', error: 'Instagram import is not built yet. For now, paste the caption into a new recipe.' };
+  if (isInstagramUrl(url)) return importInstagram(url, fetchPage);
   try {
     if (isOstaUrl(url)) {
       if (!isOstaRecipeUrl(url)) return { code: 'unsupported', error: 'That Osta link is not a recipe page. Open the recipe and copy its share link.' };
@@ -50,3 +51,6 @@ export async function importFromUrl(url: string, { fetchPage = safeFetchPage, re
     throw e;
   }
 }
+
+/** Pasted caption/comments (and optionally the post's link) to a draft. */
+export const importFromText = (texts: string[], sourceUrl: string | null): ImportResult => fromText(texts, sourceUrl);
