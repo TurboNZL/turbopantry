@@ -52,8 +52,8 @@ export function ServerUpdateCard() {
         {updated && !running && <button className="btn" onClick={() => location.reload()}>Reload this page</button>}
         {note && <span className={info.status === 'error' ? 'text-warn' : 'text-muted'}>{note}</span>}
       </div>
-      {(running || info.status === 'error' || info.status === 'done') && info.log.length > 0 && (
-        <pre className="max-h-56 overflow-auto rounded-theme bg-raised p-3 text-xs">{info.log.slice(-40).join('\n')}</pre>
+      {(running || info.status === 'error' || info.status === 'done') && (info.log?.length ?? 0) > 0 && (
+        <pre className="max-h-56 overflow-auto rounded-theme bg-raised p-3 text-xs">{(info.log ?? []).slice(-40).join('\n')}</pre>
       )}
     </Section>
   );
