@@ -4,14 +4,14 @@ import { ArrowLeft, Eye, EyeOff, Trash2, X } from 'lucide-react';
 import { GROUP_SECTIONS, PLACES, formatStock, searchItems, titleCase, type CountMode, type Item } from '@turbopantry/shared';
 import { Segmented } from './Segmented.tsx';
 import { Stepper } from './Stepper.tsx';
-import { MODE_OPTIONS, patchForMode } from './ItemSheet.tsx';
+import { COUNT_UNIT_OPTIONS, MODE_OPTIONS, WEIGHT_UNIT_OPTIONS, patchForMode } from './ItemSheet.tsx';
 import { useItems } from '../lib/data.ts';
 import { toast } from '../lib/toast.ts';
 import { useApi } from '../lib/useApi.ts';
 import { cn } from '../lib/cn.ts';
 
-const COUNT_UNITS: [string, string][] = [['', 'each'], ['can', 'cans'], ['jar', 'jars'], ['packet', 'packets'], ['bunch', 'bunches'], ['clove', 'cloves'], ['slice', 'slices'], ['piece', 'pieces']];
-const WEIGHT_UNITS: [string, string][] = [['g', 'grams'], ['kg', 'kilograms'], ['ml', 'millilitres'], ['l', 'litres']];
+const COUNT_UNITS = COUNT_UNIT_OPTIONS;
+const WEIGHT_UNITS = WEIGHT_UNIT_OPTIONS.map(([v, l]): [string, string] => [v, v === 'g' ? 'grams' : v === 'kg' ? 'kilograms' : v === 'ml' ? 'millilitres' : l]);
 const lab = 'mb-1 block text-sm font-medium';
 const field = 'input h-11';
 

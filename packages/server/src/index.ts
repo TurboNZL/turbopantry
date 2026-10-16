@@ -6,6 +6,7 @@ import { createApp } from './app.ts';
 import { addUser, listUsers, openDb, resetUserToken } from './db.ts';
 import { Updater } from './update.ts';
 import { createBrowserRenderer } from './import/browser.ts';
+import { createInstagram } from './import/instagram-session.ts';
 import { cacheAllRecipeImages } from './images.ts';
 import { safeFetchPicture } from './import/safeFetch.ts';
 
@@ -60,7 +61,7 @@ const version = gitVersion();
 const port = Number(process.env.TURBOPANTRY_PORT ?? 47900);
 const host = process.env.TURBOPANTRY_HOST ?? '0.0.0.0';
 const imagesDir = resolve(dataDir, 'images');
-createApp({ db, webDir, imagesDir, updater, version, render: createBrowserRenderer() }).listen(port, host, () => {
+createApp({ db, webDir, imagesDir, updater, version, render: createBrowserRenderer(), instagram: createInstagram({ dir: dataDir }) }).listen(port, host, () => {
   console.log(`TurboPantry ${version} on http://${host}:${port}  data: ${dataDir}  web: ${webDir ?? 'not found (API only)'}  self-update: ${updater ? 'on' : 'off'}`);
 });
 // photos saved before caching existed are fetched once, quietly, in the background

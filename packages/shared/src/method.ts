@@ -1,4 +1,4 @@
-import { canonicalUnit, formatQuantity, unitLabel } from './ingredient.ts';
+import { canonicalUnit, formatQuantity, parseIngredient, unitLabel } from './ingredient.ts';
 import type { Ingredient } from './recipe.ts';
 
 /** One piece of a method step. `bold` pieces are ingredient names the step mentions. */
@@ -49,12 +49,24 @@ const UNIT_WORDS = String.raw`(?:cups?|tbsps?|tablespoons?|tsps?|teaspoons?|kgs?
 // "2 cloves ", "175g ", "1/2 cup ", "2 x ", "1 1/2 tsp of " directly in front of an ingredient name
 const QTY_BEFORE = new RegExp(String.raw`(?:^|(?<=[\s(]))(?:about\s+|around\s+)?${NUM}\s*(?:x\s*)?(?:${UNIT_WORDS}\b\.?\s*)?(?:of\s+)?$`, 'i');
 
+/** "1/2 cup " doubled is "1 cup ": the amount in front of an ingredient in a step, scaled and written the way recipes write it. Unreadable ("2 x ") stays as it is. */
+export function scaleAmountText(text: string, factor: number): string {
+  if (/x\s*$/i.test(text.trim())) return text;
+  const trail = /\s*$/.exec(text)![0] || ' ';
+  const hasOf = /\bof$/i.test(text.trim());
+  const p = parseIngredient(text.trim().replace(/\s*\bof$/i, '') + ' x');
+  if (p.quantity === null || p.name.trim() !== 'x') return text;
+  const q = formatQuantity(p.quantity * factor) + (p.quantityMax !== null ? '\u2013' + formatQuantity(p.quantityMax * factor) : '');
+  const glued = !p.unit ? '' : /^\d+(?:[.,]\d+)?(?:g|kg|ml|l|mg|oz|lb)\b/i.test(text.trim()) ? String(p.unit) : ' ' + unitLabel(p.unit, (p.quantityMax ?? p.quantity) * factor);
+  return q + glued + (hasOf ? ' of' : '') + trail;
+}
+
 /**
  * Splits a method step into plain and bold pieces, bolding the ingredients it mentions (matched against the recipe's own ingredient names,
  * singular or plural, longest name first). With `hideQuantities`, an amount written right before a mentioned ingredient ("add 175g bacon",
  * "2 cloves garlic") is dropped; numbers anywhere else ("cook for 4 minutes", "180°C") are never touched.
  */
-export function highlightStep(step: string, ingredients: Ingredient[], opts: { hideQuantities?: boolean } = {}): Segment[] {
+export function highlightStep(step: string, ingredients: Ingredient[], opts: { hideQuantities?: boolean; factor?: number } = {}): Segment[] {
   const variants = [...new Set(ingredients.flatMap((i) => nameVariants(i.name)))].sort((a, b) => b.length - a.length);
   if (!variants.length) return [{ text: step }];
   const re = new RegExp(String.raw`\b(?:${variants.map((v) => v.split(/\s+/).map(esc).join(String.raw`\s+`)).join('|')})(?:es|s)?\b`, 'gi');
@@ -63,6 +75,7 @@ export function highlightStep(step: string, ingredients: Ingredient[], opts: { h
   for (const m of step.matchAll(re)) {
     let before = step.slice(at, m.index);
     if (opts.hideQuantities) { const q = QTY_BEFORE.exec(before); if (q) before = before.slice(0, q.index); }
+    else if (opts.factor && opts.factor !== 1) { const q = QTY_BEFORE.exec(before); if (q) before = before.slice(0, q.index) + scaleAmountText(q[0], opts.factor); }
     if (before) out.push({ text: before });
     out.push({ text: m[0], bold: true });
     at = m.index + m[0].length;

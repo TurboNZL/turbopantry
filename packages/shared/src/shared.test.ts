@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatQuantity, ingredientsToBlock, parseIngredient, parseIngredientBlock, parseMinutes, parseQuantity, parseServings, scaleIngredient } from './index.ts';
+import { displayAmount, normaliseQuantityText, unscalableLines, formatQuantity, ingredientsToBlock, parseIngredient, parseIngredientBlock, parseMinutes, parseQuantity, parseServings, scaleIngredient } from './index.ts';
 
 describe('parseQuantity', () => {
   it.each([['1', 1], ['1/2', 0.5], ['1 1/2', 1.5], ['½', 0.5], ['1½', 1.5], ['2.5', 2.5], ['1,5', 1.5]])('%s', (s, n) => expect(parseQuantity(s)).toBeCloseTo(n));
@@ -48,4 +48,20 @@ describe('quantities', () => {
 describe('durations and servings', () => {
   it.each([['PT1H30M', 90], ['PT45M', 45], ['P0DT1H', 60], ['P1DT2H', 1560], ['45 mins', 45], ['1 hr 15 min', 75], [30, 30], ['bad', null], ['P', null]])('%s', (v, n) => expect(parseMinutes(v)).toBe(n));
   it.each([['8 servings', 8], [4, 4], [['4', '4 servings'], 4], ['Serves 6', 6], ['12 cookies', 12], ['lots', null]])('%s', (v, n) => expect(parseServings(v)).toBe(n));
+});
+
+describe('amounts scale with the servings, however they are written', () => {
+  it.each([
+    ['1/2 cup milk', '1 cup'], ['½ cup milk', '1 cup'], ['1 1/2 tbsps all-purpose flour', '3 tbsp'], ['1½ cups sugar', '3 cups'], ['1/2-cup sugar', '1 cup'], ['1 / 2 cup milk', '1 cup'],
+    ['1⁄2 cup milk', '1 cup'], ['.5 cup milk', '1 cup'], ['half a cup of milk', '1 cup'], ['one cup milk', '2 cups'], ['two eggs', '4'], ['¼ tsp salt', '½ tsp'],
+    ['2-3 tbsp oil', '4–6 tbsp'], ['1/2 cup (120ml) milk', '1 cup'], ['3 tbsps', '6 tbsp'], ['1 (14 oz) can tomatoes', '2 cans'],
+  ])('%s doubled is %s', (line, amount) => expect(displayAmount(parseIngredient(line), 2, 'original', null).amount).toBe(amount));
+  it('halves too', () => { expect(displayAmount(parseIngredient('1/2 cup milk'), 0.5, 'original', null).amount).toBe('¼ cup'); expect(displayAmount(parseIngredient('1 cup milk'), 0.5, 'original', null).amount).toBe('½ cup'); });
+  it('leaves "a pinch of salt" and "salt to taste" without an amount', () => { expect(parseIngredient('a pinch of salt').quantity).toBeNull(); expect(parseIngredient('salt to taste').quantity).toBeNull(); });
+  it('reports the lines whose amount it could not read, and only those', () => {
+    const lines = ['1/2 cup milk', '3x400 g tins tomatoes', 'salt to taste', '2 eggs', '1-2 handfuls spinach'].map((l) => parseIngredient(l));
+    expect(unscalableLines(lines)).toEqual(lines.filter((l) => l.quantity === null && /^\d/.test(l.raw)).map((l) => l.raw));
+    expect(unscalableLines([parseIngredient('salt to taste')])).toEqual([]);
+  });
+  it('normalises the start of a line only', () => expect(normaliseQuantityText('1⁄2 cup of 1 / 2 and .5')).toBe('1/2 cup of 1 / 2 and .5'));
 });

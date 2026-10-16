@@ -1,8 +1,10 @@
 import { useStore } from '../lib/store.ts';
+import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { RecipeGroupsSheet } from '../components/RecipeGroupsSheet.tsx';
 import { useRowMenu } from '../lib/contextMenu.tsx';
 import { toast } from '../lib/toast.ts';
-import { BookOpen, Clock, Link2, PenLine, Plus, ShoppingCart, Trash2, Users } from 'lucide-react';
+import { BookOpen, Clock, FolderPlus, Link2, PenLine, Plus, ShoppingCart, Trash2, Users } from 'lucide-react';
 import type { RecipeSummary } from '@turbopantry/shared';
 import { LoadError } from '../components/SignInNotice.tsx';
 import { useApi, useLoad } from '../lib/useApi.ts';
@@ -16,12 +18,13 @@ export function RecipeImage({ url, className = '' }: { url: string | null; class
 
 const mins = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`);
 
-function Card({ r, onDeleted }: { r: RecipeSummary; onDeleted(): void }) {
+function Card({ r, onDeleted, onGroups }: { r: RecipeSummary; onDeleted(): void; onGroups(): void }) {
   const nav = useNavigate();
   const api = useApi();
   const menu = useRowMenu(r.title, () => [
     { label: 'Open', icon: <BookOpen size={16} />, run: () => nav(`/recipes/${r.id}`) },
     { label: 'Edit', icon: <PenLine size={16} />, run: () => nav(`/recipes/${r.id}/edit`) },
+    { label: 'Groups…', icon: <FolderPlus size={16} />, run: onGroups },
     { label: 'Add what it needs to the list', icon: <ShoppingCart size={16} />, run: () => { void api.addFromRecipe(r.id).then((x) => toast(x.added.length ? `Added ${x.added.length} to the list` : 'You have everything for it')).catch((e: Error) => toast(e.message)); } },
     { label: 'Delete', icon: <Trash2 size={16} />, danger: true, run: () => { if (window.confirm(`Delete “${r.title}”?`)) void api.deleteRecipe(r.id).then(() => { toast('Recipe deleted'); onDeleted(); }).catch((e: Error) => toast(e.message)); } },
   ]);
@@ -43,7 +46,12 @@ export function RecipesPage() {
   const api = useApi();
   const [params] = useSearchParams();
   const q = params.get('q') ?? '';
-  const { data, error, loading, reload } = useLoad(() => api.listRecipes(q), [api, q]);
+  const group = Number(params.get('group')) || null;
+  const { data, error, loading, reload } = useLoad(() => api.listRecipes(q, group), [api, q, group]);
+  const groups = useLoad(() => api.listRecipeGroups(), [api]);
+  const [, setParams] = useSearchParams();
+  const [editing, setEditing] = useState<RecipeSummary | null>(null);
+  const pickGroup = (id: number | null) => { const p = new URLSearchParams(params); if (id) p.set('group', String(id)); else p.delete('group'); setParams(p, { replace: true }); };
 
   return (
     <div className="space-y-4">
@@ -54,6 +62,12 @@ export function RecipesPage() {
           <Link to="/recipes/new" className="btn"><PenLine size={16} />Write one</Link>
         </div>
       </div>
+      {(groups.data?.length ?? 0) > 0 && (
+        <div className="-mx-1 flex flex-wrap gap-2 px-1" role="group" aria-label="Recipe groups">
+          <button className="chip min-h-[2.5rem] px-3" aria-pressed={!group} onClick={() => pickGroup(null)} data-active={!group || undefined}>All</button>
+          {groups.data!.map((g) => <button key={g.id} className="chip min-h-[2.5rem] px-3" aria-pressed={group === g.id} onClick={() => pickGroup(group === g.id ? null : g.id)} data-active={group === g.id || undefined}>{g.name} <span className="text-xs opacity-60">{g.count}</span></button>)}
+        </div>
+      )}
       {error && <LoadError error={error} />}
       {loading && !data && !error && <p className="text-sm text-muted">Loading…</p>}
       {data && data.length === 0 && (
@@ -64,7 +78,9 @@ export function RecipesPage() {
           {!q && <Link to="/recipes/import" className="btn btn-accent mt-1"><Plus size={16} />Import your first recipe</Link>}
         </div>
       )}
-      {data && data.length > 0 && <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">{data.map((r) => <Card key={r.id} r={r} onDeleted={reload} />)}</div>}
+      {data && data.length > 0 && <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">{data.map((r) => <Card key={r.id} r={r} onDeleted={reload} onGroups={() => setEditing(r)} />)}</div>}
+      {editing && <RecipeGroupsSheet recipeId={editing.id} title={editing.title} current={editing.groupIds ?? []} onClose={() => setEditing(null)} onSaved={() => { reload(); groups.reload(); }} />}
     </div>
   );
 }
+

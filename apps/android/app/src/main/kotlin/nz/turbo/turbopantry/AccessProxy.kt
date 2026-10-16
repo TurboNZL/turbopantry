@@ -78,7 +78,7 @@ class AccessProxy(private val prefs: ServerPrefs) {
                 "GET", "HEAD" -> fetch(request, url, extra)
                 else -> null
             }
-        } catch (e: Exception) { null } // fall back to Chromium's own request (the page's own headers apply)
+        } catch (e: Throwable) { null } // fall back to Chromium's own request (the page's own headers apply)
     }
 
     private fun fetch(request: WebResourceRequest, url: String, extra: Map<String, String>): WebResourceResponse? {

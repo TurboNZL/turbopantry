@@ -33,27 +33,47 @@ export interface BrowserOptions {
   noSandbox?: boolean;
 }
 
-export function createBrowserRenderer(opts: BrowserOptions = {}): PageRenderer {
+/** A launched, locked-down browser context. Shared by the Osta renderer and the Instagram session code (instagram-session.ts). */
+export interface LockedBrowser { browser: import('playwright-core').Browser; context: import('playwright-core').BrowserContext }
+export interface LockOptions extends BrowserOptions {
+  /** Saved cookies/storage (Playwright storageState) to start from: the Instagram session. */
+  storageState?: string | { cookies: any[]; origins: any[] };
+  /** What the page is called in the "no browser" message. */
+  purpose?: string;
+  /** Pretend to be an ordinary desktop Chrome (Instagram refuses "HeadlessChrome"). Off for Osta, which never needed it. */
+  plainUserAgent?: boolean;
+}
+
+/** Starts Chromium and a context in which every request is checked against allowHost (everything else is aborted) and images/fonts/media are never loaded. Caller closes `browser`. */
+export async function openLockedBrowser(opts: LockOptions = {}): Promise<LockedBrowser> {
   const allowHost = opts.allowHost ?? OSTA_HOSTS;
+  const executablePath = opts.executablePath === undefined ? findChromium() : opts.executablePath;
+  if (!executablePath) throw new FetchError('no-browser', `This server has no browser installed for ${opts.purpose ?? 'Osta imports'}. The owner can add one (see the Self-hosting guide).`);
+  let chromium;
+  try { ({ chromium } = await import('playwright-core')); } catch { throw new FetchError('no-browser', 'The browser component is not installed on this server.'); }
+  const noSandbox = opts.noSandbox ?? (process.getuid?.() === 0 || process.env.TURBOPANTRY_BROWSER_NO_SANDBOX === '1');
+  const browser = await chromium.launch({ executablePath, headless: true, args: noSandbox ? ['--no-sandbox'] : [] }).catch(() => { throw new FetchError('no-browser', 'The browser on this server could not be started.'); });
+  try {
+    const userAgent = opts.plainUserAgent ? `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${browser.version()} Safari/537.36` : undefined;
+    const context = await browser.newContext({ javaScriptEnabled: true, acceptDownloads: false, serviceWorkers: 'block', locale: 'en-US', ...(userAgent ? { userAgent, viewport: { width: 1280, height: 900 } } : {}), ...(opts.storageState ? { storageState: opts.storageState as any } : {}) });
+    await context.route('**/*', (route) => {
+      const req = route.request();
+      let host = '';
+      try { host = new URL(req.url()).hostname; } catch { return route.abort(); }
+      if (!['http:', 'https:'].includes(new URL(req.url()).protocol) || !allowHost(host)) return route.abort();
+      if (['image', 'media', 'font'].includes(req.resourceType())) return route.abort();
+      return route.continue();
+    });
+    return { browser, context };
+  } catch (e) { await browser.close().catch(() => undefined); throw e; }
+}
+
+export function createBrowserRenderer(opts: BrowserOptions = {}): PageRenderer {
   let queue: Promise<unknown> = Promise.resolve();
 
   async function run(url: string, o: RenderOptions) {
-    const executablePath = opts.executablePath === undefined ? findChromium() : opts.executablePath;
-    if (!executablePath) throw new FetchError('no-browser', 'This server has no browser installed for Osta imports. The owner can add one (see the Self-hosting guide).');
-    let chromium;
-    try { ({ chromium } = await import('playwright-core')); } catch { throw new FetchError('no-browser', 'The browser component is not installed on this server.'); }
-    const noSandbox = opts.noSandbox ?? (process.getuid?.() === 0 || process.env.TURBOPANTRY_BROWSER_NO_SANDBOX === '1');
-    const browser = await chromium.launch({ executablePath, headless: true, args: noSandbox ? ['--no-sandbox'] : [] }).catch(() => { throw new FetchError('no-browser', 'The browser on this server could not be started.'); });
+    const { browser, context } = await openLockedBrowser(opts);
     try {
-      const context = await browser.newContext({ javaScriptEnabled: true, acceptDownloads: false, serviceWorkers: 'block', locale: 'en-US' });
-      await context.route('**/*', (route) => {
-        const req = route.request();
-        let host = '';
-        try { host = new URL(req.url()).hostname; } catch { return route.abort(); }
-        if (!['http:', 'https:'].includes(new URL(req.url()).protocol) || !allowHost(host)) return route.abort();
-        if (['image', 'media', 'font'].includes(req.resourceType())) return route.abort();
-        return route.continue();
-      });
       const page = await context.newPage();
       const timeout = o.timeoutMs ?? 25_000;
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout });

@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
  * (which topic, who). Devices then reload that topic. It is plain Server-Sent Events, which a Cloudflare Tunnel passes through; a comment line
  * every 25 s keeps the tunnel from closing an idle stream (it drops them after about 100 s).
  */
-export type Topic = 'items' | 'list' | 'recipes' | 'stores';
+export type Topic = 'items' | 'list' | 'recipes' | 'stores' | 'layouts';
 
 export class Hub {
   private clients = new Set<ServerResponse>();

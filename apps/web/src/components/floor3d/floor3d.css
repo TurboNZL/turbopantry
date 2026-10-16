@@ -1,0 +1,44 @@
+/* Faux-3D scene: plain CSS 3D transforms, no perspective (an isometric look), so dragging maps exactly onto the floor. */
+@property --f3-yaw { syntax: '<angle>'; inherits: true; initial-value: 30deg; }
+@property --f3-pitch { syntax: '<angle>'; inherits: true; initial-value: 55deg; }
+@property --f3-z { syntax: '<number>'; inherits: true; initial-value: 1; }
+@property --f3-px { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --f3-py { syntax: '<length>'; inherits: true; initial-value: 0px; }
+
+.f3-viewport { position: relative; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: grab; outline-offset: -2px;
+  height: clamp(280px, 50vh, 560px); border: 1px solid hsl(var(--line)); border-radius: var(--radius, 0.75rem); background: hsl(var(--raised));
+  transition: --f3-yaw .24s ease-out, --f3-pitch .24s ease-out, --f3-z .24s ease-out, --f3-px .24s ease-out, --f3-py .24s ease-out; }
+.f3-viewport[data-gesture] { transition: none; cursor: grabbing; }
+@media (prefers-reduced-motion: reduce) { .f3-viewport { transition: none; } }
+.f3-world { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform-style: preserve-3d;
+  transform: translate(var(--f3-px), var(--f3-py)) scale(var(--f3-z)) rotateX(var(--f3-pitch)) rotateZ(var(--f3-yaw)); }
+.f3-floor { position: absolute; transform-style: preserve-3d; background-color: hsl(var(--surface));
+  background-image: linear-gradient(hsl(var(--line) / .6) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--line) / .6) 1px, transparent 1px);
+  background-size: 32px 32px; border: 2px solid hsl(var(--line)); box-sizing: content-box; margin: -2px 0 0 -2px; }
+.f3-block { position: absolute; transform-style: preserve-3d; }
+.f3-block > i { position: absolute; display: block; background: var(--c); backface-visibility: hidden; box-sizing: border-box; }
+.f3-top { inset: 0; transform: translateZ(var(--h)); }
+.f3-s { left: 0; right: 0; top: calc(100% - var(--h)); height: var(--h); transform-origin: 50% 100%; transform: rotateX(-90deg); filter: brightness(.74); }
+.f3-n { left: 0; right: 0; top: 0; height: var(--h); transform-origin: 50% 0; transform: rotateX(90deg); filter: brightness(.58); }
+.f3-e { top: 0; bottom: 0; left: calc(100% - var(--h)); width: var(--h); transform-origin: 100% 50%; transform: rotateY(90deg); filter: brightness(.66); }
+.f3-w { top: 0; bottom: 0; left: 0; width: var(--h); transform-origin: 0 50%; transform: rotateY(-90deg); filter: brightness(.86); }
+/* the front of a block gets a door */
+.f3-block[data-front='s'] .f3-s, .f3-block[data-front='n'] .f3-n { background-image: linear-gradient(90deg, transparent 14%, rgb(0 0 0 / .24) 14% 86%, transparent 86%); }
+.f3-block[data-front='e'] .f3-e, .f3-block[data-front='w'] .f3-w { background-image: linear-gradient(90deg, transparent 14%, rgb(0 0 0 / .24) 14% 86%, transparent 86%); }
+.f3-block[data-sel] > i { outline: 2px solid hsl(var(--accent)); outline-offset: -2px; }
+.f3-block[data-sel] .f3-top { box-shadow: inset 0 0 0 3px hsl(var(--accent)); }
+.f3-block[data-hot] .f3-top { box-shadow: inset 0 0 0 3px hsl(var(--warn, 38 92% 50%)); }
+.f3-block[data-bid] { cursor: pointer; }
+.f3-block[data-edit] { cursor: move; }
+.f3-block[data-wall] { cursor: default; }
+
+/* the label always faces the screen and keeps its size whatever the zoom */
+.f3-tag { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; transform-style: flat;
+  transform: translateZ(calc(var(--h) + 14px)) rotateZ(calc(var(--f3-yaw) * -1)) rotateX(calc(var(--f3-pitch) * -1)) scale(calc(1 / var(--f3-z))); }
+.f3-tag > span { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); display: inline-flex; align-items: center; gap: 3px; max-width: 120px; white-space: nowrap;
+  font-size: 11px; line-height: 1; font-weight: 600; padding: 3px 6px; border-radius: 999px; color: #111; background: rgb(255 255 255 / .9); box-shadow: 0 1px 3px rgb(0 0 0 / .35); }
+.f3-tag b { display: inline-flex; min-width: 16px; height: 16px; padding: 0 4px; align-items: center; justify-content: center; border-radius: 999px; font-size: 10px; font-weight: 700; color: #fff; background: #d97706; }
+.f3-tag b.ok { background: #64748b; }
+.f3-tag b.walk { background: hsl(var(--accent)); color: hsl(var(--accent-fg)); }
+.f3-tag .t { overflow: hidden; text-overflow: ellipsis; }
+.f3-block[data-sel] .f3-tag > span { box-shadow: 0 0 0 2px hsl(var(--accent)), 0 1px 3px rgb(0 0 0 / .35); }

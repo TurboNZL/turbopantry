@@ -66,6 +66,8 @@ class MainActivity : AppCompatActivity() {
             allowContentAccess = false
         }
         web.setBackgroundColor(BACKGROUND)
+        // the autofill framework has crashed WebViews on some phones when a page shows a password field (Settings > Server has two): the app has no use for it
+        web.importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
         web.addJavascriptInterface(TurboPantryBridge(this, web), "TurboPantryAndroid")
 
         val accessProxy = AccessProxy(ServerPrefs(this))
@@ -75,6 +77,13 @@ class MainActivity : AppCompatActivity() {
             // with a Cloudflare Access service token set they get the token added here (AccessProxy)
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                 loader.shouldInterceptRequest(request.url) ?: accessProxy.handle(request)
+            // when the page's renderer process dies (out of memory, a driver crash) Android kills the whole app unless the client says it handled
+            // it: show the app again instead (the page reloads from its saved state)
+            override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                runCatching { (view.parent as? FrameLayout)?.removeView(view); view.destroy() }
+                runOnUiThread { recreate() }
+                return true
+            }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 if (request.url.host == HOST) return false
                 runCatching { startActivity(Intent(Intent.ACTION_VIEW, request.url)) }

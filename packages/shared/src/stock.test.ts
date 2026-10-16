@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GROUPS, groupOrder, plentyInStock, parseQuickAdd, searchItems, titleCase, sectionOf, cleanItemName, fineStep, prettyStock, suggestItemUnit, convertAmount, defaultsForUnit, displayAmount, formatStock, guessCategory, gramsPerCupFor, itemKey, matchItems, parseIngredient, stockStatus, type Item } from './index.ts';
 
-const item = (o: Partial<Item> & { name: string }): Item => ({ id: 1, aliases: [], category: 'Sauces & condiments', mode: 'amount', unit: null, qty: 0, step: 1, defaultQty: 1, minQty: 0, tracked: true, gramsPerCup: null, place: null, ...o });
+const item = (o: Partial<Item> & { name: string }): Item => ({ id: 1, aliases: [], category: 'Sauces & condiments', mode: 'amount', unit: null, qty: 0, step: 1, defaultQty: 1, minQty: 0, tracked: true, recipeOnly: false, gramsPerCup: null, place: null, ...o });
 
 describe('convertAmount', () => {
   it('converts inside a kind exactly', () => {

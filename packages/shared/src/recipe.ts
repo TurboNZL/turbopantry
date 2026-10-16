@@ -33,6 +33,7 @@ export interface RecipeInput {
 
 export interface Recipe extends RecipeInput {
   id: number;
+  groupIds?: number[];
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -46,7 +47,11 @@ export interface RecipeSummary {
   servings: number | null;
   tags: string[];
   updatedAt: string;
+  /** The recipe groups (collections) it is in. */
+  groupIds?: number[];
 }
+
+export interface RecipeGroup { id: number; name: string; count: number }
 
 export type ImportErrorCode = 'bad-url' | 'blocked' | 'fetch-failed' | 'not-html' | 'no-recipe' | 'unsupported' | 'no-browser';
 export interface ImportError { error: string; code: ImportErrorCode }

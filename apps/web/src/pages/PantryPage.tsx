@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, PackageX, Plus, ShoppingCart, SlidersHorizontal, Trash2, Pencil } from 'lucide-react';
 import { GROUPS, parseQuickAdd, searchItems, titleCase, type Item } from '@turbopantry/shared';
 import { ItemSheet } from '../components/ItemSheet.tsx';
@@ -10,11 +10,11 @@ import { useRowMenu } from '../lib/contextMenu.tsx';
 import { useItems } from '../lib/data.ts';
 import { toast } from '../lib/toast.ts';
 import { useApi } from '../lib/useApi.ts';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 interface RowProps { it: Item; undoing: boolean; onOpen(): void; onChange(qty: number): void; onOut(): void; onUndo(): void; onExpire(): void; onList(): void; onMore(): void; onDelete(): void }
 
-function Row({ it, undoing, onOpen, onChange, onOut, onUndo, onExpire, onList, onMore, onDelete }: RowProps) {
+function Row({ it, undoing, onOpen, onChange, onOut, onUndo, onExpire, onList, onMore, onDelete, highlight }: RowProps & { highlight: boolean }) {
   const low = it.minQty > 0 && it.qty <= it.minQty;
   const menu = useRowMenu(titleCase(it.name), () => [
     { label: 'Add to the shopping list', icon: <ShoppingCart size={16} />, run: onList },
@@ -24,16 +24,18 @@ function Row({ it, undoing, onOpen, onChange, onOut, onUndo, onExpire, onList, o
     { label: 'Delete', icon: <Trash2 size={16} />, danger: true, run: onDelete },
   ]);
   return (
-    <div {...menu} className="flex min-h-[3.5rem] items-center gap-0.5 pl-3 pr-1">
-      <button className="flex min-w-0 flex-1 items-center gap-1 py-2 text-left" onClick={onOpen} aria-label={`${titleCase(it.name)} settings`}>
-        <span className="min-w-0"><span className={it.qty === 0 && !undoing ? 'line-clamp-2 break-words text-muted' : 'line-clamp-2 break-words font-medium'}>{titleCase(it.name)}</span>
-          {(low || it.place) && <span className="block truncate text-xs text-muted">{[low && 'running low', it.place].filter(Boolean).join(' · ')}</span>}</span>
-              </button>
-      {undoing ? <UndoButton onUndo={onUndo} onExpire={onExpire} label="Undo" /> : <>
-        <Stepper compact label={titleCase(it.name)} value={it.qty} step={it.step} unit={it.unit} onChange={onChange} />
-        <button className="btn btn-ghost flex h-10 w-10 shrink-0 items-center justify-center !p-0 disabled:opacity-30" aria-label={`Mark ${titleCase(it.name)} as out`} title="Mark as out" disabled={it.qty === 0} onClick={onOut}><PackageX size={18} /></button>
+    <div {...menu} id={`item-${it.id}`} className={`flex min-h-[3.5rem] items-center gap-0.5 pl-3 pr-1 ${highlight ? 'bt-flash' : ''}`}>
+      <div className="flex min-w-0 flex-1 items-center">
+        <button className="min-w-0 py-2 text-left" onClick={onOpen} aria-label={`${titleCase(it.name)} settings`}>
+          <span className={it.qty === 0 && !undoing ? 'line-clamp-2 break-words text-muted' : 'line-clamp-2 break-words font-medium'}>{titleCase(it.name)}</span>
+          {(low || it.place || it.recipeOnly) && <span className="block truncate text-xs text-muted">{[it.recipeOnly && 'only in a recipe', low && !it.recipeOnly && 'running low', it.place].filter(Boolean).join(' · ')}</span>}
+        </button>
         <button className="btn btn-ghost flex h-10 w-10 shrink-0 items-center justify-center !p-0" aria-label={`Add ${titleCase(it.name)} to the list`} title="Add to the shopping list" onClick={onList}><ShoppingCart size={18} /></button>
-      </>}
+      </div>
+      <Stepper compact label={titleCase(it.name)} value={it.qty} step={it.step} unit={it.unit} onChange={onChange} />
+      {undoing
+        ? <UndoButton compact onUndo={onUndo} onExpire={onExpire} label="Undo" />
+        : <button className="btn btn-ghost flex h-10 w-10 shrink-0 items-center justify-center !p-0 disabled:opacity-30" aria-label={`Mark ${titleCase(it.name)} as out`} title="Mark as out" disabled={it.qty === 0} onClick={onOut}><PackageX size={18} /></button>}
     </div>
   );
 }
@@ -47,14 +49,23 @@ export function PantryPage() {
   const [open, setOpen] = useState<Item | null>(null);
   const [outed, setOuted] = useState<Record<number, number>>({}); // item id -> how much there was, while Undo is on offer
   const toList = useAddToList(reload);
+  const [params] = useSearchParams();
+  const focus = Number(params.get('item')) || null;
+  const [show, setShow] = useState<{ have: boolean; out: boolean; recipe: boolean }>(() => { try { return { have: true, out: true, recipe: false, ...(JSON.parse(localStorage.getItem('turbopantry.pantryFilter') ?? '{}') as object) }; } catch { return { have: true, out: true, recipe: false }; } });
+  const setFilter = (k: 'have' | 'out' | 'recipe', v: boolean) => setShow((s) => { const n = { ...s, [k]: v }; try { localStorage.setItem('turbopantry.pantryFilter', JSON.stringify(n)); } catch { /* not saved */ } return n; });
+  // coming from the shopping list ("view in the pantry"): open that item
+  useEffect(() => { if (focus) { const it = items.find((i) => i.id === focus); if (it) { setOpen(it); document.getElementById(`item-${focus}`)?.scrollIntoView({ block: 'center' }); } } }, [focus, items.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const tracked = useMemo(() => items.filter((i) => i.tracked), [items]);
+  const tracked = items;
   const text = q.trim();
-  const shown = text ? searchItems(tracked, text, 200) : tracked;
-  const low = tracked.filter((i) => i.minQty > 0 && i.qty <= i.minQty);
+  const stateOf = (i: Item): 'have' | 'out' | 'recipe' => (i.qty > 0 ? 'have' : i.recipeOnly ? 'recipe' : 'out');
+  const counts = useMemo(() => ({ have: items.filter((i) => stateOf(i) === 'have').length, out: items.filter((i) => stateOf(i) === 'out').length, recipe: items.filter((i) => stateOf(i) === 'recipe').length }), [items]); // eslint-disable-line react-hooks/exhaustive-deps
+  const visible = tracked.filter((i) => show[stateOf(i)] || i.id in outed); // an item just marked out stays put while its Undo is on offer
+  const shown = text ? searchItems(tracked, text, 200) : visible; // searching looks at everything
+  const low = tracked.filter((i) => !i.recipeOnly).filter((i) => i.minQty > 0 && i.qty <= i.minQty);
   const parsed = parseQuickAdd(text);
   const exact = text ? items.find((i) => i.name.toLowerCase() === parsed.words.toLowerCase()) : null;
-  const untracked = text ? searchItems(items.filter((i) => !i.tracked), parsed.words, 3) : [];
+  const untracked: Item[] = [];
   const groups = GROUPS.map((c) => ({ c, rows: shown.filter((i) => i.category === c).sort((a, b) => Number(a.qty === 0 && !(a.id in outed)) - Number(b.qty === 0 && !(b.id in outed)) || a.name.localeCompare(b.name)) })).filter((g) => g.rows.length);
 
   async function change(it: Item, qty: number) {
@@ -97,10 +108,19 @@ export function PantryPage() {
     <div className="space-y-4 pb-4">
       <h1 className="text-2xl font-bold">Pantry</h1>
       <form className="sticky top-14 z-10 -mx-1 flex gap-2 bg-bg/90 px-1 py-2 backdrop-blur md:top-16" onSubmit={(e) => { e.preventDefault(); if (!exact) void add(); }}>
-        <input className="input h-12 flex-1 text-base" placeholder="Find or add: milk, 2kg flour…" aria-label="Find or add an item" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="done" autoCapitalize="none" />
+        <input className="input find-box h-12 flex-1 text-base" placeholder="Find or add: milk, 2kg flour…" aria-label="Find or add an item" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="done" autoCapitalize="none" />
         {text && !exact && <button className="btn btn-accent h-12 px-4" aria-label={`Add ${text}`}><Plus size={20} /></button>}
       </form>
 
+      {!text && (
+        <fieldset className="flex flex-wrap items-center gap-x-2 gap-y-1" aria-label="Show">
+          <legend className="sr-only">Show</legend>
+          {([['have', 'Have', counts.have], ['out', 'Out of', counts.out], ['recipe', 'Only in recipes', counts.recipe]] as const).map(([k, label, n]) => (
+            <label key={k} className={`chip inline-flex min-h-[2.5rem] cursor-pointer items-center gap-2 px-3 ${show[k] ? 'ring-2 ring-accent' : 'opacity-70'}`}>
+              <input type="checkbox" className="h-4 w-4" checked={show[k]} onChange={(e) => setFilter(k, e.target.checked)} />{label}<span className="text-xs opacity-70">{n}</span></label>
+          ))}
+        </fieldset>
+      )}
       {error && !items.length && <LoadError error={error} />}
       {untracked.map((it) => (
         <button key={it.id} className="card flex min-h-[3.25rem] w-full items-center justify-between px-4 text-left" onClick={() => void bring(it)}>
@@ -126,7 +146,7 @@ export function PantryPage() {
           <div className="card divide-y divide-line overflow-hidden">
             {rows.map((it) => (
               <Row key={it.id} it={it} undoing={it.id in outed} onOpen={() => setOpen(it)} onChange={(v) => void change(it, v)} onOut={() => void out(it)} onUndo={() => void undoOut(it)} onExpire={() => expire(it.id)}
-                onList={() => void toList.add(it)} onMore={() => nav(`/settings?tab=items&item=${it.id}`)} onDelete={() => void del(it)} />
+                onList={() => void toList.add(it)} onMore={() => nav(`/settings?tab=items&item=${it.id}`)} onDelete={() => void del(it)} highlight={focus === it.id} />
             ))}
           </div>
         </section>
