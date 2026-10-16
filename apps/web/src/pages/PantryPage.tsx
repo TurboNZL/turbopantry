@@ -11,6 +11,9 @@ import { useItems } from '../lib/data.ts';
 import { toast } from '../lib/toast.ts';
 import { useApi } from '../lib/useApi.ts';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Kitchen3D } from '../components/floor3d/index.tsx';
+import { useStore } from '../lib/store.ts';
+import { Box, List as ListIcon } from 'lucide-react';
 
 interface RowProps { it: Item; undoing: boolean; onOpen(): void; onChange(qty: number): void; onOut(): void; onUndo(): void; onExpire(): void; onList(): void; onMore(): void; onDelete(): void }
 
@@ -49,6 +52,10 @@ export function PantryPage() {
   const [open, setOpen] = useState<Item | null>(null);
   const [outed, setOuted] = useState<Record<number, number>>({}); // item id -> how much there was, while Undo is on offer
   const toList = useAddToList(reload);
+  const view3d = useStore((st) => st.settings.view3d);
+  const [mode, setMode] = useState<'list' | 'kitchen'>(() => { try { return localStorage.getItem('turbopantry.pantryView') === 'kitchen' ? 'kitchen' : 'list'; } catch { return 'list'; } });
+  const pick = (m: 'list' | 'kitchen') => { setMode(m); try { localStorage.setItem('turbopantry.pantryView', m); } catch { /* not saved */ } };
+  const kitchen = view3d && mode === 'kitchen';
   const [params] = useSearchParams();
   const focus = Number(params.get('item')) || null;
   const [show, setShow] = useState<{ have: boolean; out: boolean; recipe: boolean }>(() => { try { return { have: true, out: true, recipe: false, ...(JSON.parse(localStorage.getItem('turbopantry.pantryFilter') ?? '{}') as object) }; } catch { return { have: true, out: true, recipe: false }; } });
@@ -106,13 +113,22 @@ export function PantryPage() {
 
   return (
     <div className="space-y-4 pb-4">
-      <h1 className="text-2xl font-bold">Pantry</h1>
-      <form className="sticky top-14 z-10 -mx-1 flex gap-2 bg-bg/90 px-1 py-2 backdrop-blur md:top-16" onSubmit={(e) => { e.preventDefault(); if (!exact) void add(); }}>
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-2xl font-bold">Pantry</h1>
+        {view3d && (
+          <div role="radiogroup" aria-label="Pantry view" className="grid grid-flow-col gap-1 rounded-theme border border-line bg-raised p-1">
+            <button role="radio" aria-checked={!kitchen} className={`flex min-h-[2.5rem] items-center gap-1.5 rounded-theme px-3 text-sm font-medium ${!kitchen ? 'bg-accent text-accent-fg' : 'text-muted'}`} onClick={() => pick('list')}><ListIcon size={16} />List</button>
+            <button role="radio" aria-checked={kitchen} className={`flex min-h-[2.5rem] items-center gap-1.5 rounded-theme px-3 text-sm font-medium ${kitchen ? 'bg-accent text-accent-fg' : 'text-muted'}`} onClick={() => pick('kitchen')}><Box size={16} />Kitchen</button>
+          </div>
+        )}
+      </div>
+      {kitchen && <Kitchen3D items={items} onChange={(it, qty) => void change(it, qty)} onOut={(it) => void out(it)} onList={(it) => void toList.add(it)} />}
+      {!kitchen && <form className="sticky top-14 z-10 -mx-1 flex gap-2 bg-bg/90 px-1 py-2 backdrop-blur md:top-16" onSubmit={(e) => { e.preventDefault(); if (!exact) void add(); }}>
         <input className="input find-box h-12 flex-1 text-base" placeholder="Find or add: milk, 2kg flour…" aria-label="Find or add an item" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="done" autoCapitalize="none" />
         {text && !exact && <button className="btn btn-accent h-12 px-4" aria-label={`Add ${text}`}><Plus size={20} /></button>}
-      </form>
+      </form>}
 
-      {!text && (
+      {!kitchen && !text && (
         <fieldset className="flex flex-wrap items-center gap-x-2 gap-y-1" aria-label="Show">
           <legend className="sr-only">Show</legend>
           {([['have', 'Have', counts.have], ['out', 'Out of', counts.out], ['recipe', 'Only in recipes', counts.recipe]] as const).map(([k, label, n]) => (
@@ -121,6 +137,7 @@ export function PantryPage() {
           ))}
         </fieldset>
       )}
+      {!kitchen && <>
       {error && !items.length && <LoadError error={error} />}
       {untracked.map((it) => (
         <button key={it.id} className="card flex min-h-[3.25rem] w-full items-center justify-between px-4 text-left" onClick={() => void bring(it)}>
@@ -152,6 +169,7 @@ export function PantryPage() {
         </section>
       ))}
       {text && !groups.length && !untracked.length && <p className="px-1 text-sm text-muted">Nothing called “{text}”. Press + to add it.</p>}
+      </>}
       {open && <ItemSheet key={open.id} item={items.find((i) => i.id === open.id) ?? open} onClose={() => setOpen(null)} onSaved={reload} />}
       {toList.node}
     </div>

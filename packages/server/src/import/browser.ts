@@ -42,6 +42,11 @@ export interface LockOptions extends BrowserOptions {
   purpose?: string;
   /** Pretend to be an ordinary desktop Chrome (Instagram refuses "HeadlessChrome"). Off for Osta, which never needed it. */
   plainUserAgent?: boolean;
+  /** Let images, fonts and media load (still only from allowed hosts). ONLY for a page a person is looking at (the Instagram live login view). */
+  allowMedia?: boolean;
+  /** Page size in CSS pixels and the pixel ratio (the live view lays the page out for the owner's phone). */
+  viewport?: { width: number; height: number };
+  deviceScaleFactor?: number;
 }
 
 /** Starts Chromium and a context in which every request is checked against allowHost (everything else is aborted) and images/fonts/media are never loaded. Caller closes `browser`. */
@@ -55,13 +60,13 @@ export async function openLockedBrowser(opts: LockOptions = {}): Promise<LockedB
   const browser = await chromium.launch({ executablePath, headless: true, args: noSandbox ? ['--no-sandbox'] : [] }).catch(() => { throw new FetchError('no-browser', 'The browser on this server could not be started.'); });
   try {
     const userAgent = opts.plainUserAgent ? `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${browser.version()} Safari/537.36` : undefined;
-    const context = await browser.newContext({ javaScriptEnabled: true, acceptDownloads: false, serviceWorkers: 'block', locale: 'en-US', ...(userAgent ? { userAgent, viewport: { width: 1280, height: 900 } } : {}), ...(opts.storageState ? { storageState: opts.storageState as any } : {}) });
+    const context = await browser.newContext({ javaScriptEnabled: true, acceptDownloads: false, serviceWorkers: 'block', locale: 'en-US', ...(userAgent ? { userAgent, viewport: opts.viewport ?? { width: 1280, height: 900 } } : opts.viewport ? { viewport: opts.viewport } : {}), ...(opts.deviceScaleFactor ? { deviceScaleFactor: opts.deviceScaleFactor } : {}), ...(opts.storageState ? { storageState: opts.storageState as any } : {}) });
     await context.route('**/*', (route) => {
       const req = route.request();
       let host = '';
       try { host = new URL(req.url()).hostname; } catch { return route.abort(); }
       if (!['http:', 'https:'].includes(new URL(req.url()).protocol) || !allowHost(host)) return route.abort();
-      if (['image', 'media', 'font'].includes(req.resourceType())) return route.abort();
+      if (!opts.allowMedia && ['image', 'media', 'font'].includes(req.resourceType())) return route.abort();
       return route.continue();
     });
     return { browser, context };
