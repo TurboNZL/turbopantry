@@ -434,12 +434,6 @@ export function createInstagram(opts: InstagramOptions): InstagramService {
       if (now > l.deadline) { await endLive(l, 'closed', 'timeout', 'The login window was open for 5 minutes and was closed. Open it again to try once more.'); return; }
       if (now - l.lastSeen > liveIdle) { await endLive(l, 'closed', 'abandoned', 'The login window was closed because nobody was looking at it.'); return; }
       try {
-        const page = livePage(l);
-        if (page) {
-          // remember what was typed in the USERNAME box (never the password) so the saved session can say whose it is
-          const u = await page.evaluate((sel) => (document.querySelector(sel) as HTMLInputElement | null)?.value ?? '', USER_INPUT).catch(() => '');
-          if (u && u.length <= 128) l.username = u;
-        }
         if (now >= l.nextCheck && (await hasSession(l.lb.context))) { await checkLiveSession(l); if (l.state !== 'open') return; }
       } catch { /* the page is changing */ }
       if (l.frame === null || now - l.lastFrameAsk < 20_000) await captureLive(l);
@@ -473,6 +467,9 @@ export function createInstagram(opts: InstagramOptions): InstagramService {
       made = l;
       l.timer = setTimeout(() => { void endLive(l, 'closed', 'timeout', 'The login window was open for 5 minutes and was closed. Open it again to try once more.'); }, liveWindow);
       l.timer.unref?.();
+      // remember what is typed in the USERNAME box (never the password) so the saved session can say whose it is
+      await lb.context.exposeFunction('__tpUser', (v: unknown) => { if (typeof v === 'string' && v.length > 0 && v.length <= 128) l.username = v; });
+      await lb.context.addInitScript(`document.addEventListener('input', function (e) { var t = e.target; if (t && t.tagName === 'INPUT' && t.type !== 'password' && /^(username|email)$/.test(t.name || '') && typeof window.__tpUser === 'function') window.__tpUser(String(t.value)); }, true);`);
       lb.context.on('page', (np) => { if (np === l.internal) return; l.pages.push(np); np.setDefaultTimeout(stepMs); np.on('dialog', (d) => { void d.dismiss().catch(() => undefined); }); });
       page.on('dialog', (d) => { void d.dismiss().catch(() => undefined); });
       lb.browser.on('disconnected', () => { void endLive(l, 'closed', 'error', 'The browser on the server stopped.'); });
@@ -511,7 +508,7 @@ export function createInstagram(opts: InstagramOptions): InstagramService {
     const l = current(id);
     if (l.state !== 'open') throw new LiveError(404, 'no-live', 'That login window is not open any more.');
     if (!Array.isArray(events) || events.length === 0 || events.length > 50) throw new LiveError(400, 'bad-input', 'Send between 1 and 50 events at a time.');
-    if (recent(l.inputs, 10_000) >= 200) throw new LiveError(429, 'rate', 'Too many inputs. Slow down.');
+    if (recent(l.inputs, 10_000) + events.length > 300) throw new LiveError(429, 'rate', 'Too many inputs. Slow down.');
     // validate everything before touching the page: all or nothing
     const todo: LiveEvent[] = [];
     for (const raw of events) {
@@ -523,7 +520,8 @@ export function createInstagram(opts: InstagramOptions): InstagramService {
       else if (e.type === 'text') { const t = e.text; if (typeof t !== 'string' || t.length === 0 || t.length > 200 || /[\u0000-\u001f\u007f]/.test(t)) throw new LiveError(400, 'bad-input', 'The text must be 1 to 200 characters on one line.'); todo.push({ type: 'text', text: t }); }
       else throw new LiveError(400, 'bad-input', 'Unknown input.');
     }
-    l.inputs.push(Date.now()); l.lastSeen = Date.now();
+    for (let i = 0; i < todo.length; i++) l.inputs.push(Date.now());
+    l.lastSeen = Date.now();
     const page = livePage(l);
     if (!page) return;
     for (const e of todo) {

@@ -61,7 +61,7 @@ export function PairCard() {
   const [devices, setDevices] = useState<{ id: number; label: string; createdAt: string; lastUsed: string | null }[]>([]);
   const [paste, setPaste] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const load = useCallback(() => { new Api(settings).listDevices().then(setDevices, () => setDevices([])); }, [settings.serverUrl, settings.token, settings.cfAccessId, settings.cfAccessSecret]); // eslint-disable-line react-hooks/exhaustive-deps
+  const load = useCallback(() => { new Api(settings).listDevices().then((d) => setDevices(Array.isArray(d) ? d : []), () => setDevices([])); }, [settings.serverUrl, settings.token, settings.cfAccessId, settings.cfAccessSecret]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (settings.token) load(); }, [load, settings.token]);
 
   async function make() {

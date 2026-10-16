@@ -22,6 +22,8 @@ export class Api {
     const res = await fetch(`${base}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     const data = (await res.json().catch(() => null)) as (T & Partial<ImportError>) | null;
     if (!res.ok) throw new ApiError(res.status, res.status === 401 ? 'Wrong token' : data?.error ?? `Server said ${res.status}`, data?.code);
+    // a 200 that is not JSON is not our server (a Cloudflare Access sign-in page, a captive portal, an old proxy): never hand a null to the screens
+    if (data === null) throw new ApiError(res.status, 'That address did not answer like a TurboPantry server. If it sits behind Cloudflare Access, add the service token in Settings → Server.', 'not-json');
     return data as T;
   }
 
