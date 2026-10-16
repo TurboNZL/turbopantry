@@ -26,7 +26,7 @@ async function fakeInstagram(): Promise<Fake> {
   await new Promise<void>((r) => evilSrv.listen(0, '127.0.0.1', r));
   const evilPort = (evilSrv.address() as AddressInfo).port;
   const html = (body: string) => `<!doctype html><html><head><meta charset="utf-8"><title>Instagram</title><style>body{margin:0;font:16px sans-serif;background:#fff} input,button{position:absolute;left:20px;width:200px;height:40px;box-sizing:border-box;font-size:16px} #u{top:20px} #p{top:80px} #b{top:140px} #msg{position:absolute;top:210px;left:20px}</style></head><body>${body}</body></html>`;
-  const form = (msg = '') => html(`<form method="post" action="/accounts/login/"><input id="u" name="username" aria-label="Phone number, username, or email"><input id="p" type="password" name="password" aria-label="Password"><button id="b" type="submit">Log in</button></form><p id="msg" role="alert">${msg}</p><img src="/logo.png" width="8" height="8" alt=""><img src="http://localhost:${evilPort}/evil.png" width="8" height="8" alt="">`);
+  const form = (msg = '') => html(`<form method="post" action="/accounts/login/"><input id="u" name="username" aria-label="Phone number, username, or email"><input id="p" type="password" name="password" aria-label="Password"><button id="b" type="submit">Log in</button></form><p id="msg" role="alert">${msg}</p><a id="pop" href="/popup" target="_blank" style="position:absolute;top:260px;left:20px;width:200px;height:30px">Help</a><img src="/logo.png" width="8" height="8" alt=""><img src="http://localhost:${evilPort}/evil.png" width="8" height="8" alt="">`);
   const srv: Server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://x');
     hits.push(`${req.method} ${url.pathname}`);
@@ -36,6 +36,7 @@ async function fakeInstagram(): Promise<Fake> {
       const raw = Buffer.concat(chunks).toString('utf8');
       if (req.method === 'POST') bodies.push(raw);
       const form_ = new URLSearchParams(raw);
+      if (url.pathname === '/popup') { res.writeHead(200, { 'content-type': 'text/html' }); res.end('<title>Help centre</title><body>POPUPPAGE please wait a few minutes</body>'); return; }
       if (url.pathname === '/logo.png') { res.writeHead(200, { 'content-type': 'image/png' }); res.end(PNG); return; }
       if (url.pathname === '/accounts/login/' && req.method === 'GET') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(form()); return; }
       if (url.pathname === '/accounts/login/' && req.method === 'POST') {
@@ -106,6 +107,21 @@ describe.skipIf(!findChromium())('Instagram live login window (real Chromium, fa
     const again = await ig.liveStart(VIEW); await ig.liveCancel(again.id);
   }, 60_000);
 
+  it('follows a popup (new tab) and tells the owner what the server saw, including a "wait a few minutes" block', async () => {
+    fresh();
+    const ig = mk();
+    const { id } = await ig.liveStart(VIEW);
+    await until(() => /HTTP 200/.test(ig.liveStatus(id).seen ?? ''));
+    expect(ig.liveStatus(id).seen).toMatch(/Page "Instagram" at 127\.0\.0\.1:\d+\/accounts\/login\/ · HTTP 200/);
+    await ig.liveInput(id, [tap({ x: 60, y: 275 })]);
+    await until(() => /POPUPPAGE/.test(ig.liveStatus(id).seen ?? ''));
+    const st = ig.liveStatus(id);
+    expect(st.seen).toContain('Help centre'); expect(st.seen).not.toMatch(/sessionid|cookie/i);
+    await until(() => !!ig.liveStatus(id).notice);
+    expect(ig.liveStatus(id).notice).toMatch(/wait|try again later/i);
+    expect(ig.liveStatus(id).state).toBe('open');
+  }, 60_000);
+
   it('allows one window at a time and cancel closes it', async () => {
     fresh();
     const ig = mk();
@@ -123,17 +139,12 @@ describe.skipIf(!findChromium())('Instagram live login window (real Chromium, fa
     expect(existsSync(sessionFile())).toBe(false);
   }, 60_000);
 
-  it('closes the window after the hard cap, and when nobody is looking', async () => {
+  it('closes the window after the hard cap', async () => {
     fresh();
     const ig = mk({ liveWindowMs: 1500 });
     const a = await ig.liveStart(VIEW);
     await until(() => ig.liveStatus(a.id).state === 'closed', 8000);
     expect(ig.liveStatus(a.id)).toMatchObject({ state: 'closed', reason: 'timeout' });
-    const ig2 = mk({ liveIdleMs: 1200 });
-    const b = await ig2.liveStart(VIEW);
-    await until(() => ig2.liveStatus().state === 'closed' && ig2.liveStatus().reason === 'abandoned' || false, 8000).catch(() => undefined);
-    // liveStatus counts as "looking", so wait without asking: closed only by the idle check
-    expect(['open', 'closed']).toContain(ig2.liveStatus(b.id).state);
   }, 60_000);
 
   it('closes an abandoned window (no one asks for it)', async () => {
@@ -164,7 +175,7 @@ describe.skipIf(!findChromium())('Instagram live login window (real Chromium, fa
 
   it('limits how fast input arrives', async () => {
     fresh();
-    const ig = mk();
+    const ig = mk({ liveMaxEvents: 120 });
     const { id } = await ig.liveStart(VIEW);
     let limited = false;
     for (let i = 0; i < 12 && !limited; i++) await ig.liveInput(id, Array.from({ length: 50 }, () => ({ type: 'wheel' as const, x: 5, y: 5, dy: 1 }))).catch((e) => { limited = e.code === 'rate'; });
@@ -175,8 +186,7 @@ describe.skipIf(!findChromium())('Instagram live login window (real Chromium, fa
     fresh();
     const ig = mk({ baseUrl: `http://localhost:${fake.port}` }); // same machine, but not the allowed NAME
     await expect(ig.liveStart(VIEW)).rejects.toMatchObject({ code: 'failed' });
-    expect(fake.hits.filter((h) => h === 'GET /accounts/login/').length).toBeGreaterThanOrEqual(0);
-    await expect(ig.liveStart(VIEW)).resolves.toBeDefined().catch(() => undefined);
+    expect(ig.liveStatus().state).toBe('closed'); // nothing stays open, nothing stays locked
   }, 60_000);
 
   describe('through the server (owner only, plain HTTP)', () => {
@@ -234,7 +244,7 @@ describe.skipIf(!findChromium())('Instagram live login window (real Chromium, fa
       const id = body.id;
       const c = await req(owner, 'POST', '/api/admin/instagram/live/cancel', { id });
       expect(await c.json()).toMatchObject({ state: 'closed', reason: 'cancelled' });
-      expect((await req(owner, 'GET', `/api/admin/instagram/live/frame?id=${id}`)).status).toBe(404);
+      expect((await req(owner, 'GET', `/api/admin/instagram/live/frame?id=${id}`)).status).toBe(410);
     }, 60_000);
   });
 }, 120_000);
