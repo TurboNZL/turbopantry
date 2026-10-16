@@ -67,13 +67,13 @@ function parse(raw: string, allowPrivate = false): URL {
   return u;
 }
 
-function once(u: URL, allowPrivate: boolean): Promise<IncomingMessage> {
+function once(u: URL, allowPrivate: boolean, accept = 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5'): Promise<IncomingMessage> {
   return new Promise((resolve, reject) => {
     const req = (u.protocol === 'https:' ? httpsRequest : httpRequest)(u, {
       method: 'GET', ...(allowPrivate ? {} : { lookup: safeLookup }), timeout: TIMEOUT_MS,
       headers: {
         'user-agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0 TurboPantry',
-        accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5', 'accept-language': 'en;q=0.9', 'accept-encoding': 'gzip, deflate, br',
+        accept, 'accept-language': 'en;q=0.9', 'accept-encoding': 'gzip, deflate, br',
       },
     }, resolve);
     req.on('timeout', () => req.destroy(new FetchError('fetch-failed', 'The website took too long to answer.')));
@@ -82,18 +82,22 @@ function once(u: URL, allowPrivate: boolean): Promise<IncomingMessage> {
   });
 }
 
-async function readBody(res: IncomingMessage): Promise<string> {
+async function readBuffer(res: IncomingMessage, maxBytes: number): Promise<Buffer> {
   const enc = String(res.headers['content-encoding'] ?? '').toLowerCase();
   const stream = enc === 'gzip' ? res.pipe(createGunzip()) : enc === 'deflate' ? res.pipe(createInflate()) : enc === 'br' ? res.pipe(createBrotliDecompress()) : res;
   const chunks: Buffer[] = []; let size = 0;
   try {
     for await (const c of stream as AsyncIterable<Buffer>) {
       size += c.length;
-      if (size > MAX_BYTES) { res.destroy(); throw new FetchError('fetch-failed', 'That page is too large to import.'); }
+      if (size > maxBytes) { res.destroy(); throw new FetchError('fetch-failed', 'That is too large to fetch.'); }
       chunks.push(c);
     }
   } catch (e) { throw e instanceof FetchError ? e : new FetchError('fetch-failed', 'The page could not be read.'); }
-  const buf = Buffer.concat(chunks);
+  return Buffer.concat(chunks);
+}
+
+async function readBody(res: IncomingMessage): Promise<string> {
+  const buf = await readBuffer(res, MAX_BYTES);
   const charset = /charset=["']?([\w-]+)/i.exec(String(res.headers['content-type'] ?? ''))?.[1] ?? /<meta[^>]+charset=["']?([\w-]+)/i.exec(buf.subarray(0, 4096).toString('latin1'))?.[1] ?? 'utf-8';
   try { return new TextDecoder(charset).decode(buf); } catch { return buf.toString('utf8'); }
 }
@@ -118,3 +122,25 @@ export const makeFetcher = (allowPrivate = false): PageFetcher => async (raw) =>
 };
 
 export const safeFetchPage: PageFetcher = makeFetcher(false);
+
+export interface Picture { url: string; type: string; bytes: Buffer }
+export type PictureFetcher = (url: string) => Promise<Picture>;
+const MAX_PICTURE = 8 * 1024 * 1024;
+
+/** The same guarded fetch for a picture (recipe photos are cached on the server): same address checks, redirects, time cap; its own size cap. The caller checks what the bytes really are. */
+export const makePictureFetcher = (allowPrivate = false): PictureFetcher => async (raw) => {
+  let u = parse(raw, allowPrivate);
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const res = await once(u, allowPrivate, 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8');
+    const status = res.statusCode ?? 0;
+    if (status >= 300 && status < 400 && res.headers.location) {
+      res.resume();
+      try { u = parse(new URL(res.headers.location, u).toString(), allowPrivate); } catch (e) { throw e instanceof FetchError ? e : new FetchError('bad-url', 'The website redirected somewhere invalid.'); }
+      continue;
+    }
+    if (status < 200 || status >= 300) { res.resume(); throw new FetchError('fetch-failed', `The website answered ${status}.`); }
+    return { url: u.toString(), type: String(res.headers['content-type'] ?? ''), bytes: await readBuffer(res, MAX_PICTURE) };
+  }
+  throw new FetchError('fetch-failed', 'The website redirected too many times.');
+};
+export const safeFetchPicture: PictureFetcher = makePictureFetcher(false);

@@ -47,6 +47,36 @@ describe('api', () => {
   });
 });
 
+describe('cors (the Android app serves the page from http://localhost)', () => {
+  const origin = 'http://localhost';
+  it('answers a preflight for the allowed origin without a token, naming the Access headers', async () => {
+    const r = await fetch(`${base}/api/recipes`, { method: 'OPTIONS', headers: { origin, 'access-control-request-method': 'POST', 'access-control-request-headers': 'authorization,content-type,cf-access-client-id' } });
+    expect(r.status).toBe(204);
+    expect(r.headers.get('access-control-allow-origin')).toBe(origin);
+    expect(r.headers.get('access-control-allow-headers')?.toLowerCase()).toContain('cf-access-client-secret');
+    expect(r.headers.get('access-control-allow-methods')).toContain('PUT');
+    expect(r.headers.get('vary')).toBe('Origin');
+  });
+  it('adds the origin to real answers, errors included, and never answers with *', async () => {
+    const ok = await fetch(`${base}/api/status`, { headers: { origin, authorization: `Bearer ${token}` } });
+    expect(ok.headers.get('access-control-allow-origin')).toBe(origin);
+    const denied = await fetch(`${base}/api/status`, { headers: { origin } });
+    expect(denied.status).toBe(401);
+    expect(denied.headers.get('access-control-allow-origin')).toBe(origin);
+    expect((await fetch(`${base}/api/health`, { headers: { origin } })).headers.get('access-control-allow-origin')).toBe(origin);
+  });
+  it('gives no CORS headers to another origin, and no preflight answer', async () => {
+    const r = await fetch(`${base}/api/status`, { headers: { origin: 'https://evil.example', authorization: `Bearer ${token}` } });
+    expect(r.headers.get('access-control-allow-origin')).toBeNull();
+    const pre = await fetch(`${base}/api/recipes`, { method: 'OPTIONS', headers: { origin: 'https://evil.example', 'access-control-request-method': 'POST' } });
+    expect(pre.status).toBe(401);
+    expect(pre.headers.get('access-control-allow-origin')).toBeNull();
+  });
+  it('does not touch the web client files', async () => {
+    expect((await fetch(`${base}/`, { headers: { origin } })).headers.get('access-control-allow-origin')).toBeNull();
+  });
+});
+
 describe('web client', () => {
   it('serves index.html at / and for unknown paths (single-page app)', async () => {
     for (const p of ['/', '/recipes/123']) {

@@ -18,6 +18,10 @@
         "apps/web/public/favicon-32.png",
         32
       ]
-    ]
+    ],
+    "android": {
+      "res": "apps/android/app/src/main/res",
+      "stat": "ic_stat_app"
+    }
   }
 }

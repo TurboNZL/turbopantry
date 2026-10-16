@@ -6,7 +6,7 @@ TurboPantry keeps your recipes and a shopping list you can share with the people
 Follow [SELF_HOSTING.md](SELF_HOSTING.md): one command on a Linux machine or Raspberry Pi installs and starts it. It prints your token.
 
 ## 2. Make an account for each person
-The installer made the first account (the owner). To add the people you share with, run `add-user` once per person (the command is in SELF_HOSTING.md). It prints that person's token a single time; only a fingerprint is stored, so a lost token means making a new account.
+The installer made the first account (the owner). To add the people you share with, run `add-user` once per person (the command is in SELF_HOSTING.md). It prints that person's token a single time; only a fingerprint is stored, but a lost token is not a lost account: **Settings → Server → Pair a device** signs another device in, and `new-token <name>` on the server replaces the main token.
 
 ## 3. Sign in on each device
 Open the server's address. Go to **Settings → Server**, paste the token, press **Save and test**. It says who you are signed in as.

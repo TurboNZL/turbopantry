@@ -54,3 +54,8 @@ html, body { overflow-x: hidden; overscroll-behavior-x: none; }
 
 /* Multi-line boxes: a pill radius (Spotify, YouTube Music) would clip the text at the corners. Stopgap for TurboNZL/turbothemes#1; delete when the engine does this. */
 textarea.input { border-radius: min(var(--in-r, var(--ctl-r, 8px)), 1.25rem); padding-inline: max(var(--in-px, 0.75rem), 1rem); padding-block: 0.6rem; }
+
+/* the outline that draws itself around an Undo button while there is still time to take the change back */
+@keyframes draw-outline { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.undo-outline { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw-outline var(--undo-ms, 10s) linear forwards; }
+@media (prefers-reduced-motion: reduce) { .undo-outline { animation-duration: var(--undo-ms, 10s); } }

@@ -29,7 +29,7 @@ describe('items', () => {
   it('makes an item with a guessed category and the unit\'s default step and amount', async () => {
     const r = await call('POST', '/api/items', { name: 'Plain flour', unit: 'g', qty: 1000 });
     expect(r.status).toBe(201);
-    expect(r.body).toMatchObject({ name: 'Plain flour', category: 'Pantry', unit: 'g', qty: 1000, step: 100, defaultQty: 500, tracked: true, existed: false });
+    expect(r.body).toMatchObject({ name: 'Plain flour', category: 'Flour & baking', unit: 'g', qty: 1000, step: 100, defaultQty: 500, tracked: true, existed: false });
   });
   it('returns the existing item for the same words, so linking never duplicates', async () => {
     const first = await mkItem({ name: 'Free Range Eggs' });
@@ -37,11 +37,11 @@ describe('items', () => {
     expect(again.status).toBe(200);
     expect(again.body).toMatchObject({ id: first.id, existed: true });
   });
-  it('lets the user tweak step, default, minimum, staple and place', async () => {
+  it('lets the user tweak step, default, minimum, counting mode and place', async () => {
     const it = await mkItem({ name: 'Milk', unit: 'l', step: 1, defaultQty: 2, minQty: 1, place: 'Fridge' });
-    expect(it).toMatchObject({ step: 1, defaultQty: 2, minQty: 1, place: 'Fridge', category: 'Dairy & eggs' });
-    const up = await call('PUT', `/api/items/${it.id}`, { step: 2, staple: true });
-    expect(up.body).toMatchObject({ step: 2, staple: true });
+    expect(it).toMatchObject({ step: 1, defaultQty: 2, minQty: 1, place: 'Fridge', category: 'Milk & cream' });
+    const up = await call('PUT', `/api/items/${it.id}`, { step: 2, mode: 'chunks' });
+    expect(up.body).toMatchObject({ step: 2, mode: 'chunks' });
   });
   it('rejects bad input', async () => {
     expect((await call('POST', '/api/items', { name: '  ' })).status).toBe(400);
@@ -87,7 +87,7 @@ describe('the shopping list', () => {
     const it = await mkItem({ name: 'Basmati rice', unit: 'g', defaultQty: 1000, step: 250 });
     const r = await call('POST', '/api/list', { itemId: it.id });
     expect(r.status).toBe(201);
-    expect(r.body).toMatchObject({ itemId: it.id, name: 'Basmati rice', qty: 1000, unit: 'g', category: 'Pantry', checked: false, addedBy: 'Alex' });
+    expect(r.body).toMatchObject({ itemId: it.id, name: 'Basmati rice', qty: 1000, unit: 'g', category: 'Rice & grains', checked: false, addedBy: 'Alex' });
   });
   it('treats a typed name that is the same words as a pantry item as that item', async () => {
     const it = await mkItem({ name: 'Spring onions', unit: null, defaultQty: 2 });
@@ -101,11 +101,48 @@ describe('the shopping list', () => {
     expect(r.body.qty).toBe(1500);
     expect(((await call('GET', '/api/list')).body as any[]).filter((e) => e.itemId === it.id)).toHaveLength(1);
   });
-  it('takes things that are not in the pantry at all, with a guessed aisle', async () => {
+  it('a name nobody used before becomes a pantry item too, so the list and the pantry never drift apart', async () => {
     const r = await call('POST', '/api/list', { name: 'Birthday candles', qty: 1 });
-    expect(r.body).toMatchObject({ itemId: null, category: 'Other' });
-    expect((await call('POST', '/api/list', { name: 'Fresh basil' })).body.category).toBe('Produce');
+    expect(r.body.itemId).toEqual(expect.any(Number));
+    expect(r.body).toMatchObject({ category: 'Other', name: 'Birthday candles' });
+    const made = ((await call('GET', '/api/items')).body as any[]).find((i) => i.id === r.body.itemId);
+    expect(made).toMatchObject({ name: 'Birthday candles', tracked: true, qty: 0 });
+    expect((await call('POST', '/api/list', { name: 'Fresh basil' })).body.category).toBe('Herbs & aromatics');
     expect((await call('POST', '/api/list', {})).status).toBe(400);
+  });
+  it('"750 grams" for a name typed with a unit counts the new item in grams', async () => {
+    const r = await call('POST', '/api/list', { name: 'Lamb shanks', qty: 750, unit: 'g' });
+    expect(r.body).toMatchObject({ qty: 750, unit: 'g' });
+    expect(((await call('GET', '/api/items')).body as any[]).find((i) => i.id === r.body.itemId)).toMatchObject({ unit: 'g', mode: 'weight' });
+  });
+  it('an amount without a unit is counted in the item\'s own unit', async () => {
+    const it = await mkItem({ name: 'Free range chicken', unit: 'g', qty: 0 });
+    expect((await call('POST', '/api/list', { itemId: it.id, qty: 750 })).body).toMatchObject({ qty: 750, unit: 'g' });
+  });
+  it('"I am out" zeroes the pantry count now; "keep the count" means buying it changes nothing; "more" is the plain case', async () => {
+    const out = await mkItem({ name: 'Sunflower oil', unit: 'ml', qty: 900 });
+    await call('POST', '/api/list', { itemId: out.id, qty: 750, stock: 'out' });
+    expect(await stockOf(out.id)).toBe(0);
+    const keep = await mkItem({ name: 'Rock salt', unit: 'g', qty: 800 });
+    const e = (await call('POST', '/api/list', { itemId: keep.id, qty: 500, stock: 'keep' })).body;
+    expect(e.addsStock).toBe(false);
+    const done = await call('PUT', `/api/list/${e.id}`, { checked: true });
+    expect(done.body.stock).toBeNull();
+    expect(await stockOf(keep.id)).toBe(800);
+    const more = await mkItem({ name: 'Cornflour', unit: 'g', qty: 300 });
+    const m = (await call('POST', '/api/list', { itemId: more.id, qty: 500, stock: 'more' })).body;
+    await call('PUT', `/api/list/${m.id}`, { checked: true });
+    expect(await stockOf(more.id)).toBe(800);
+  });
+  it('bought lines leave the list at once (no completed list) and Undo brings the line and the stock back', async () => {
+    const it = await mkItem({ name: 'Brown rice', unit: 'g', qty: 0 });
+    const e = (await call('POST', '/api/list', { itemId: it.id, qty: 1000 })).body;
+    await call('PUT', `/api/list/${e.id}`, { checked: true });
+    expect(((await call('GET', '/api/list')).body as any[]).some((x) => x.id === e.id)).toBe(false);
+    expect(await stockOf(it.id)).toBe(1000);
+    await call('PUT', `/api/list/${e.id}`, { checked: false });
+    expect(((await call('GET', '/api/list')).body as any[]).some((x) => x.id === e.id)).toBe(true);
+    expect(await stockOf(it.id)).toBe(0);
   });
   it('ticking puts what was bought into stock; unticking takes exactly that back', async () => {
     const it = await mkItem({ name: 'Pasta shells', unit: 'g', qty: 100 });
@@ -134,10 +171,10 @@ describe('the shopping list', () => {
     expect(((await call('GET', '/api/list')).body as any[]).some((x) => x.id === e.id)).toBe(false);
     expect(await stockOf(it.id)).toBe(400);
   });
-  it('lists open lines before ticked ones, in aisle order', async () => {
+  it('lists lines grouped in the default shop order and carries each item\'s step', async () => {
     const list = (await call('GET', '/api/list')).body as any[];
-    const firstChecked = list.findIndex((e) => e.checked);
-    if (firstChecked !== -1) expect(list.slice(firstChecked).every((e) => e.checked)).toBe(true);
+    expect(list.every((e) => !e.checked)).toBe(true);
+    expect(list.every((e) => typeof e.step === 'number' && e.step > 0)).toBe(true);
   });
 });
 
@@ -151,23 +188,21 @@ describe('recipes and the pantry', () => {
     expect(r.body.ingredients[0].itemId).toBe(flour.id);
     expect(r.body.ingredients[1].itemId).toBeNull();
   });
-  it('adds only what the recipe is missing: enough, staples skipped, shortfall rounded to nothing', async () => {
+  it('adds only what the recipe is missing: enough is skipped, shortfall rounded to nothing', async () => {
     const flour = await mkItem({ name: 'Bread flour', unit: 'g', qty: 200 });
     const eggs = await mkItem({ name: 'Duck eggs', qty: 6 });
-    const salt = await mkItem({ name: 'Sea salt', staple: true });
     const butter = await mkItem({ name: 'Cultured butter', unit: 'g', qty: 0 });
     const r = await call('POST', '/api/recipes', recipe([
       ing('1 cup bread flour', 1, 'cup', 'bread flour'),      // needs 125 g, has 200: enough
       ing('4 duck eggs', 4, null, 'duck eggs'),                // has 6: enough
-      ing('1 tsp sea salt', 1, 'tsp', 'sea salt'),             // staple
       ing('100 g cultured butter', 100, 'g', 'cultured butter'), // has none: add 100 g
       ing('3 spring onions', 3, null, 'mystery onion'),        // not in the pantry: added whole
     ]));
     const res = await call('POST', '/api/list/from-recipe', { recipeId: r.body.id });
-    expect(res.body.skipped.map((s: any) => [s.name, s.reason])).toEqual([['Bread flour', 'enough'], ['Duck eggs', 'enough'], ['Sea salt', 'staple']]);
-    expect(res.body.added.map((a: any) => [a.name, a.qty, a.unit])).toEqual([['Cultured butter', 100, 'g'], ['mystery onion', 3, null]]);
-    expect(res.body.checkStock).toEqual(['mystery onion']);
-    void flour; void eggs; void salt; void butter;
+    expect(res.body.skipped.map((s: any) => [s.name, s.reason])).toEqual([['Bread flour', 'enough'], ['Duck eggs', 'enough']]);
+    expect(res.body.added.map((a: any) => [a.name, a.qty, a.unit])).toEqual([['Cultured butter', 100, 'g'], ['Mystery onion', 3, null]]);
+    expect(res.body.checkStock).toEqual(['Mystery onion']);
+    void flour; void eggs; void butter;
   });
   it('adds only the difference when there is some but not enough, and scales with servings', async () => {
     const it = await mkItem({ name: 'Plain yoghurt', unit: 'g', qty: 100 });
@@ -228,5 +263,43 @@ describe('live updates', () => {
     await call('POST', '/api/stock/adjust', { changes: [{ itemId: it.id, delta: 1 }] });
     await sam.next(/event: items\n/);
     sam.close();
+  });
+});
+
+describe('shop layouts', () => {
+  it('creates, orders, renames and deletes a store; unknown groups are ignored; names are unique', async () => {
+    const made = await call('POST', '/api/stores', { name: 'Pak’nSave', order: ['Fruit', 'Vegetables', 'Nope'] });
+    expect(made.status).toBe(201);
+    expect(made.body).toMatchObject({ name: 'Pak’nSave', order: ['Fruit', 'Vegetables'] });
+    expect((await call('POST', '/api/stores', { name: 'pak’nsave' })).status).toBe(409);
+    const up = await call('PUT', `/api/stores/${made.body.id}`, { order: ['Eggs', 'Fruit'] });
+    expect(up.body).toMatchObject({ name: 'Pak’nSave', order: ['Eggs', 'Fruit'] });
+    expect(((await call('GET', '/api/stores')).body as any[]).map((x) => x.name)).toContain('Pak’nSave');
+    expect((await call('POST', '/api/stores', { name: '' })).status).toBe(400);
+    expect((await call('DELETE', `/api/stores/${made.body.id}`)).status).toBe(200);
+    expect((await call('PUT', `/api/stores/${made.body.id}`, { name: 'x' })).status).toBe(404);
+  });
+});
+
+describe('device tokens (pairing)', () => {
+  it('a paired device signs in as the same account, can be listed, and stops working once revoked', async () => {
+    const made = await call('POST', '/api/devices', { label: 'Kitchen phone' });
+    expect(made.status).toBe(201);
+    expect(made.body.token).toMatch(/^tp_/);
+    const st = await call('GET', '/api/status', undefined, made.body.token);
+    expect(st.body.user).toBe('Alex');
+    const list = (await call('GET', '/api/devices')).body as any[];
+    const mine = list.find((d) => d.label === 'Kitchen phone');
+    expect(mine).toBeTruthy();
+    expect(JSON.stringify(list)).not.toContain(made.body.token);
+    expect((await call('DELETE', `/api/devices/${mine.id}`)).status).toBe(200);
+    expect((await call('GET', '/api/status', undefined, made.body.token)).status).toBe(401);
+  });
+  it('one person cannot revoke or list another person\'s devices', async () => {
+    const theirs = (await call('POST', '/api/devices', { label: 'Sam phone' }, token2)).body;
+    expect(((await call('GET', '/api/devices')).body as any[]).some((d) => d.label === 'Sam phone')).toBe(false);
+    const id = ((await call('GET', '/api/devices', undefined, token2)).body as any[])[0].id;
+    expect((await call('DELETE', `/api/devices/${id}`)).status).toBe(404);
+    expect((await call('GET', '/api/status', undefined, theirs.token)).status).toBe(200);
   });
 });

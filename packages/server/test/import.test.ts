@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { extractFromJsonLd, lenientParse } from '../src/import/jsonld.ts';
+import { readEmbed } from '../src/import/instagram.ts';
 import { isOstaRecipeUrl, parseOstaPage } from '../src/import/osta.ts';
-import { importFromUrl } from '../src/import/index.ts';
+import { importFromText, importFromUrl } from '../src/import/index.ts';
 import { FetchError, isBlockedAddress, makeFetcher, safeFetchPage } from '../src/import/safeFetch.ts';
 import { gzipSync } from 'node:zlib';
 import { createBrowserRenderer, findChromium, OSTA_HOSTS } from '../src/import/browser.ts';
@@ -159,6 +160,17 @@ describe('Osta share pages', () => {
   it.each([['https://ostarecipes.com/s/recipes/bKmcW83bkt1UBWs17gB2', true], ['https://ostarecipes.com/recipes/abc', true], ['https://www.ostarecipes.com/recipes/abc/', true],
     ['https://ostarecipes.com/creators/explore', false], ['https://ostarecipes.com/', false], ['https://evilostarecipes.com/recipes/abc', false], ['https://ostarecipes.com.evil.com/recipes/abc', false]])('recognises %s -> %s', (u, ok) => expect(isOstaRecipeUrl(u)).toBe(ok));
 
+  describe('an Osta recipe that has a method (real saved page, Directions block)', () => {
+    const d = parseOstaPage(fx('osta-share-page-with-method.html'), 'https://ostarecipes.com/recipes/5fQKhPHCJxsRWIuxImcd')!;
+    it('reads the six steps once, in order, and drops the no-method warning', () => {
+      expect(d.recipe.steps).toHaveLength(6);
+      expect(d.recipe.steps[0]).toMatch(/^Bring a large pot of salted water/);
+      expect(d.recipe.steps[5]).toMatch(/serve hot\.$/);
+      expect(d.warnings.some((w) => /no method/i.test(w))).toBe(false);
+    });
+    it('still reads the ingredients', () => expect(d.recipe.ingredients.length).toBeGreaterThan(5));
+  });
+
   describe('an Osta recipe that was copied from a website', () => {
     // the saved page with a source address in its description and zero prep/cook times, like the carbonara the user imported
     const copied = html
@@ -258,4 +270,38 @@ describe.skipIf(!findChromium())('headless renderer (real Chromium, local test p
 describe('OSTA_HOSTS allow-list', () => {
   it.each(['ostarecipes.com', 'www.ostarecipes.com', 'firestore.googleapis.com', 'firebasestorage.googleapis.com', 'www.gstatic.com'])('allows %s', (h) => expect(OSTA_HOSTS(h)).toBe(true));
   it.each(['evil.com', 'ostarecipes.com.evil.com', 'notostarecipes.com', 'localhost', '127.0.0.1', '169.254.169.254', 'googleapis.com.evil.io'])('refuses %s', (h) => expect(OSTA_HOSTS(h)).toBe(false));
+});
+
+describe('Instagram (markup modelled on the public embed page; the real site is not reachable from the build sandbox)', () => {
+  const CAP = 'Garlic butter prawns 🍤\\n\\nIngredients\\n300g prawns\\n3 cloves garlic\\n2 tbsp butter\\n\\nMethod\\n1. Melt the butter.\\n2. Add garlic and prawns, cook 3 minutes.';
+  const visible = `<html><body><div class="Caption"><a class="CaptionUsername" href="/chef/">chef</a><br/>${CAP.replace(/\\n/g, '<br/>')}<div class="CaptionComments">View all 12 comments</div></div><img class="EmbeddedMediaImage" src="https://scontent.cdninstagram.com/a.jpg?x=1&amp;y=2"></body></html>`;
+  const blob = `<html><script>window.__d = {"shortcode_media":{"edge_media_to_caption":{"edges":[{"node":{"text":"${CAP}"}}]}}}</script></html>`;
+  const meta = `<html><head><meta property="og:description" content="120 likes, 4 comments - chef on March 3, 2026: &quot;Toast\\nIngredients\\n2 slices bread\\n1 tbsp butter&quot;."></head></html>`;
+  it.each([['visible caption block', visible], ['data blob', blob]])('reads the %s', (_n, html) => {
+    const p = readEmbed(html)!;
+    expect(p.caption).toMatch(/^Garlic butter prawns/);
+    expect(p.caption).not.toMatch(/chef|View all/);
+  });
+  it('reads the description meta, and finds nothing on a login wall', () => {
+    expect(readEmbed(meta)!.caption).toMatch(/^Toast/);
+    expect(readEmbed('<html><body>Log in to continue</body></html>')).toBeNull();
+  });
+  it('imports a reel link into a draft with the post as its source', async () => {
+    const seen: string[] = [];
+    const r = await importFromUrl('https://www.instagram.com/reel/Cabc123/?igsh=xyz', { fetchPage: async (u) => { seen.push(u); return { url: u, html: visible }; } });
+    expect(seen).toEqual(['https://www.instagram.com/p/Cabc123/embed/captioned/']);
+    expect(r).toMatchObject({ recipe: { title: 'Garlic butter prawns', sourceUrl: 'https://www.instagram.com/reel/Cabc123/', sourceName: 'Instagram', imageUrl: 'https://scontent.cdninstagram.com/a.jpg?x=1&y=2' } });
+    expect((r as any).recipe.ingredients).toHaveLength(3);
+    expect((r as any).recipe.steps).toHaveLength(2);
+  });
+  it('points to the paste box when Instagram hides the post, or the link is not a post', async () => {
+    expect(await importFromUrl('https://www.instagram.com/p/Cabc123/', { fetchPage: async (u) => ({ url: u, html: '<html>Log in</html>' }) })).toMatchObject({ code: 'unsupported', error: expect.stringContaining('Paste the caption') });
+    expect(await importFromUrl('https://www.instagram.com/p/Cabc123/', { fetchPage: async () => { throw new FetchError('fetch-failed', 'refused'); } })).toMatchObject({ error: expect.stringContaining('Paste the caption') });
+    expect(await importFromUrl('https://www.instagram.com/chef/', { fetchPage: async (u) => ({ url: u, html: '' }) })).toMatchObject({ code: 'unsupported' });
+  });
+  it('reads pasted text, the recipe in a comment included', () => {
+    const r = importFromText(['Dinner!! recipe in the comments', 'Ingredients\n2 eggs\n1 cup milk\nMethod\n1. Whisk.\n2. Cook.'], null);
+    expect(r).toMatchObject({ recipe: { title: 'Dinner' } });
+    expect(importFromText(['my puppy 🐶'], null)).toMatchObject({ code: 'no-recipe' });
+  });
 });

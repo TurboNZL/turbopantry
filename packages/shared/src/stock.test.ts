@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { CATEGORIES, cleanItemName, fineStep, prettyStock, suggestItemUnit, convertAmount, defaultsForUnit, displayAmount, formatStock, guessCategory, gramsPerCupFor, itemKey, matchItems, parseIngredient, stockStatus, type Item } from './index.ts';
+import { GROUPS, groupOrder, plentyInStock, parseQuickAdd, searchItems, titleCase, sectionOf, cleanItemName, fineStep, prettyStock, suggestItemUnit, convertAmount, defaultsForUnit, displayAmount, formatStock, guessCategory, gramsPerCupFor, itemKey, matchItems, parseIngredient, stockStatus, type Item } from './index.ts';
 
-const item = (o: Partial<Item> & { name: string }): Item => ({ id: 1, aliases: [], category: 'Pantry', unit: null, qty: 0, step: 1, defaultQty: 1, minQty: 0, staple: false, tracked: true, gramsPerCup: null, place: null, ...o });
+const item = (o: Partial<Item> & { name: string }): Item => ({ id: 1, aliases: [], category: 'Sauces & condiments', mode: 'amount', unit: null, qty: 0, step: 1, defaultQty: 1, minQty: 0, tracked: true, gramsPerCup: null, place: null, ...o });
 
 describe('convertAmount', () => {
   it('converts inside a kind exactly', () => {
@@ -105,8 +105,9 @@ describe('names and matching', () => {
 });
 
 describe('guessCategory', () => {
-  it.each([['tomatoes', 'Produce'], ['fresh tomato paste', 'Pantry'], ['butter', 'Dairy & eggs'], ['peanut butter', 'Pantry'], ['shortcut bacon rashers', 'Meat & fish'], ['frozen peas', 'Frozen'], ['unicorn dust', 'Other'], ['wholemeal bread', 'Bakery'], ['fettuccine pasta', 'Pantry']])('%s -> %s', (n, c) => expect(guessCategory(n)).toBe(c));
-  it('only ever returns a known category', () => expect(CATEGORIES).toContain(guessCategory('anything at all') as never));
+  it.each([['tomatoes', 'Vegetables'], ['fresh tomato paste', 'Sauces & condiments'], ['butter', 'Butter & spreads'], ['peanut butter', 'Jams & spreads'], ['shortcut bacon rashers', 'Pork & bacon'], ['frozen peas', 'Frozen veg & fruit'],
+    ['unicorn dust', 'Other'], ['wholemeal bread', 'Bread'], ['fettuccine pasta', 'Pasta & noodles'], ['chicken breast', 'Chicken & turkey'], ['plain flour', 'Flour & baking'], ['free range eggs', 'Eggs'], ['sweet potato', 'Vegetables'], ['olive oil', 'Oils & vinegars'], ['toilet paper', 'Paper & foil']])('%s -> %s', (n, c) => expect(guessCategory(n)).toBe(c));
+  it('only ever returns a known category', () => expect(GROUPS).toContain(guessCategory('anything at all')));
 });
 
 describe('defaults and formatting', () => {
@@ -131,8 +132,7 @@ describe('stockStatus', () => {
     expect(stockStatus(ing('1 cup milk'), 1, item({ name: 'Milk', unit: null, qty: 0 })).state).toBe('none'); // nothing in stock is none whatever the units
     expect(stockStatus(ing('2 clove garlic'), 1, item({ name: 'Garlic', unit: 'g', qty: 100 })).state).toBe('unknown');
   });
-  it('staples are always fine; a line with no amount needs any stock', () => {
-    expect(stockStatus(ing('1 tsp salt'), 1, item({ name: 'Salt', staple: true })).state).toBe('staple');
+  it('a line with no amount needs any stock', () => {
     expect(stockStatus(ing('Pepper to taste'), 1, item({ name: 'Pepper', qty: 1 })).state).toBe('enough');
     expect(stockStatus(ing('Pepper to taste'), 1, item({ name: 'Pepper', qty: 0 })).state).toBe('none');
   });
@@ -149,5 +149,39 @@ describe('prettyStock, fineStep, suggestItemUnit', () => {
     const u = (l: string) => suggestItemUnit(parseIngredient(l));
     expect(u('375 g pasta')).toBe('g'); expect(u('2 kg flour')).toBe('kg'); expect(u('1 cup milk')).toBe('ml'); expect(u('1 cup plain flour')).toBe('g');
     expect(u('1 tsp salt')).toBeNull(); expect(u('2 clove garlic')).toBe('clove'); expect(u('4 eggs')).toBeNull();
+  });
+});
+
+describe('groups', () => {
+  it('has no duplicates and every group has a section', () => { expect(new Set(GROUPS).size).toBe(GROUPS.length); expect(GROUPS.every((g) => sectionOf(g) !== 'Other' || g === 'Other')).toBe(true); });
+  it('a store order comes first, the rest follow in the default order, unknown names are ignored', () => {
+    const o = groupOrder({ order: ['Eggs', 'Nope', 'Fruit'] });
+    expect(o.slice(0, 2)).toEqual(['Eggs', 'Fruit']);
+    expect(o).toHaveLength(GROUPS.length);
+    expect(groupOrder(null)).toEqual(GROUPS);
+  });
+});
+
+describe('titleCase', () => {
+  it.each([['free range EGGS', 'Free Range Eggs'], ['salt and pepper', 'Salt and Pepper'], ['UHT milk', 'UHT Milk'], ['chicken-breast', 'Chicken-Breast'], ['', '']])('%s -> %s', (a, b) => expect(titleCase(a)).toBe(b));
+});
+
+describe('quick add', () => {
+  it.each([['750 grams ch', 750, 'g', 'ch'], ['750g ch', 750, 'g', 'ch'], ['750 ch', 750, null, 'ch'], ['2kg flour', 2, 'kg', 'flour'], ['milk', null, null, 'milk'], ['7up', null, null, '7up']])('%s', (t, q, u, w) => expect(parseQuickAdd(t)).toEqual({ qty: q, unit: u, words: w }));
+  const chicken = item({ id: 1, name: 'Chicken Breast', unit: 'g', tracked: true }), chips = item({ id: 2, name: 'Chips' }), mince = item({ id: 3, name: 'Beef Mince', aliases: ['chuck mince'] }), cheese = item({ id: 4, name: 'Cheese', tracked: false });
+  const all = [chips, mince, chicken, cheese];
+  it('finds by the start of any word, prefix matches first', () => {
+    expect(searchItems(all, 'ch').map((i) => i.name)).toEqual(['Beef Mince', 'Chicken Breast', 'Chips', 'Cheese']); // Beef Mince through its alias "chuck mince"; the order: name starts with, then pantry items, then A-Z
+    expect(searchItems(all, 'chick bre').map((i) => i.name)).toEqual(['Chicken Breast']);
+    expect(searchItems(all, 'chuck').map((i) => i.name)).toEqual(['Beef Mince']);
+    expect(searchItems(all, 'zzz')).toEqual([]);
+    expect(searchItems(all, '')).toEqual([]);
+  });
+  it('puts names that start with the text before ones that only contain a word', () => expect(searchItems(all, 'min')[0]!.name).toBe('Beef Mince'));
+  it('asks about stock only when there is plenty', () => {
+    expect(plentyInStock({ qty: 5, step: 1, tracked: true })).toBe(true);
+    expect(plentyInStock({ qty: 2, step: 1, tracked: true })).toBe(false);
+    expect(plentyInStock({ qty: 600, step: 250, tracked: true })).toBe(true);
+    expect(plentyInStock({ qty: 5, step: 1, tracked: false })).toBe(false);
   });
 });

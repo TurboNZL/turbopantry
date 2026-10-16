@@ -78,8 +78,9 @@ async function route(path: string, m: string, req: IncomingMessage, res: ServerR
       if (body.qty === null || (typeof body.qty === 'number' && Number.isFinite(body.qty) && body.qty >= 0 && body.qty <= 1e7)) input.qty = body.qty as number | null;
       if (body.unit === null || typeof body.unit === 'string') input.unit = body.unit as string | null;
       if (typeof body.note === 'string') input.note = body.note;
+      if (body.stock === 'more' || body.stock === 'out' || body.stock === 'keep') input.stock = body.stock;
       const entry = addToList(db, input, user.name);
-      hub.send('list', user.name); json(res, 201, entry); return true;
+      hub.send('list', user.name); hub.send('items', user.name); json(res, 201, entry); return true;
     }
     bad(res, 'Method not allowed', 405); return true;
   }

@@ -9,7 +9,7 @@ export function Sheet({ title, onClose, children, footer }: { title: string; onC
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center md:items-center" role="dialog" aria-modal="true" aria-label={title}>
+    <div className="fixed inset-0 z-[55] flex items-end justify-center md:items-center" role="dialog" aria-modal="true" aria-label={title}>
       <button type="button" className="absolute inset-0 bg-black/50" aria-label="Close" onClick={onClose} />
       <div className="bt-window relative flex max-h-[88vh] w-full flex-col md:max-w-lg">
         <div className="bt-titlebar flex items-center justify-between px-4 py-3"><h2 className="font-semibold">{title}</h2>

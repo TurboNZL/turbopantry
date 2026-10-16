@@ -42,7 +42,9 @@ Each person has their own account and token. As a user with `sudo` on the server
 ```
 sudo -u turbopantry -H bash -c "cd /mnt/data/turbopantry/app/packages/server && TURBOPANTRY_DATA=/mnt/data/turbopantry/data node --experimental-strip-types src/index.ts add-user Sam"
 ```
-(Use your own folder in place of `/mnt/data/turbopantry`.) It prints Sam's token once. Replace `users` for `add-user Sam` to list the accounts. Everyone sees the same recipes; only the first account (the owner) can update the server.
+(Use your own folder in place of `/mnt/data/turbopantry`.) It prints Sam's token once.
+
+**Pairing and lost tokens.** Signed in once, you never need the printed token again: **Settings → Server → Pair a device** makes a code (or link) that signs another phone or computer in, with its own token, the server address and the Cloudflare Access service token if you set one. Each device can be removed there. If every device is gone, `new-token Sam` (same command as above, with `new-token` instead of `add-user`) prints a fresh token for that account and keeps all its data. Replace `users` for `add-user Sam` to list the accounts. Everyone sees the same recipes; only the first account (the owner) can update the server.
 
 ## Running it by hand (no installer)
 You need Node 22.13+, git and pnpm. `git clone https://github.com/TurboNZL/turbopantry.git`, then in it `pnpm install --ignore-scripts --filter @turbopantry/shared --filter @turbopantry/server --filter @turbopantry/web`, `pnpm --filter @turbopantry/web build`, and run `node --experimental-strip-types src/index.ts` from `packages/server`. This also works on Windows and macOS for trying it out; there is no Windows installer.
@@ -82,5 +84,5 @@ See [UPDATING.md](UPDATING.md).
 | What you see | What to do |
 |---|---|
 | The server will not start | `journalctl -u turbopantry -n 50` |
-| "Wrong token" | Use the token printed when the account was made. A lost token cannot be shown again; ask the owner to make a new account name. |
+| "Wrong token" | Use the token printed when the account was made, or pair the device from one that is signed in (Settings → Server → Pair a device). A lost token cannot be shown again, but it never costs you the account: run `new-token <name>` on the server (below), or make a new one from any signed-in device. |
 | The page loads but is empty or old | Hard-refresh; after an update open devices pick up the new client when they next load the page. |

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { HeaderEventSource } from './sse.ts';
 import { useApi } from './useApi.ts';
 
-export type Topic = 'items' | 'list' | 'recipes';
+export type Topic = 'items' | 'list' | 'recipes' | 'stores';
 
 /**
  * One live stream per device (Server-Sent Events, read with fetch so the token and any Cloudflare Access headers can be sent). The server only says
@@ -11,7 +11,7 @@ export type Topic = 'items' | 'list' | 'recipes';
  */
 const subs = new Map<Topic, Set<() => void>>();
 const notify = (t: Topic) => subs.get(t)?.forEach((fn) => fn());
-const notifyAll = () => (['items', 'list', 'recipes'] as Topic[]).forEach(notify);
+const notifyAll = () => (['items', 'list', 'recipes', 'stores'] as Topic[]).forEach(notify);
 
 export function subscribe(topic: Topic, fn: () => void): () => void {
   let set = subs.get(topic);
@@ -31,7 +31,7 @@ export function useLiveConnection() {
     const open = () => {
       es = new HeaderEventSource(url, headers);
       es.onopen = () => { tries = 0; if (wasUp) notifyAll(); wasUp = true; };
-      for (const t of ['items', 'list', 'recipes'] as Topic[]) es.addEventListener(t, () => notify(t));
+      for (const t of ['items', 'list', 'recipes', 'stores'] as Topic[]) es.addEventListener(t, () => notify(t));
       es.onerror = () => { if (stopped) return; timer = window.setTimeout(open, Math.min(30_000, 1000 * 2 ** Math.min(tries++, 5))); };
     };
     open();

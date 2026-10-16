@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { Item, ListEntry } from '@turbopantry/shared';
+import type { Item, ListEntry, Store } from '@turbopantry/shared';
 import { useApi } from './useApi.ts';
 import { useSynced } from './synced.ts';
 
@@ -15,4 +15,10 @@ export function useListEntries() {
   const api = useApi();
   const s = useSynced<ListEntry[]>('list', 'list', () => api.listEntries(), [api]);
   return { ...s, entries: s.data ?? [] };
+}
+
+export function useStores() {
+  const api = useApi();
+  const s = useSynced<Store[]>('stores', 'stores', () => api.listStores(), [api]);
+  return { ...s, stores: s.data ?? [] };
 }

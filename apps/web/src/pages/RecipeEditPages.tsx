@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useEffect } from 'react';
 import type { RecipeInput } from '@turbopantry/shared';
 import { EMPTY_RECIPE, RecipeForm } from '../components/RecipeForm.tsx';
 import { LoadError } from '../components/SignInNotice.tsx';
@@ -66,11 +67,29 @@ export function ImportPage() {
   const [choices, setChoices] = useState<Choices>({});
   const { busy: saving, error: saveError, submit } = useSave(async (r) => api.createRecipe({ ...r, ingredients: await resolveLinks(api, r.ingredients, choices, items) }));
 
+  const [params] = useSearchParams();
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [caption, setCaption] = useState('');
+  const [comment, setComment] = useState('');
+  // a link shared from another app (the Android share sheet) arrives as ?url=
+  useEffect(() => { const u = params.get('url'); if (u) { setUrl(u); void fetchDraft(undefined, u); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function fetchText(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true); setError(null); setDraft(null); setWarnings([]); setAlternative(null);
+    try { const d = await api.importText(caption, comment.trim() ? [comment] : [], /^https?:\/\//i.test(url.trim()) ? url.trim() : undefined); setDraft(d.recipe); setChoices(defaultChoices(d.recipe.ingredients, items)); setWarnings(d.warnings); }
+    catch (err) { setError(err instanceof ApiError ? (err.status === 401 ? 'Sign in first (Settings → Server).' : err.message) : EXPLAIN.unsupported!); }
+    finally { setBusy(false); }
+  }
+
   async function fetchDraft(e?: React.FormEvent, address = url) {
     e?.preventDefault();
     setBusy(true); setError(null); setDraft(null); setWarnings([]); setAlternative(null);
     try { const d = await api.importUrl(address.trim()); setDraft(d.recipe); setChoices(defaultChoices(d.recipe.ingredients, items)); setWarnings(d.warnings); setAlternative(d.alternative ?? null); }
-    catch (err) { setError(err instanceof ApiError ? (err.status === 401 ? 'Sign in first (Settings → Server).' : err.message) : EXPLAIN.unsupported!); }
+    catch (err) {
+      setError(err instanceof ApiError ? (err.status === 401 ? 'Sign in first (Settings → Server).' : err.message) : EXPLAIN.unsupported!);
+      if (err instanceof ApiError && /paste/i.test(err.message)) setPasteOpen(true);
+    }
     finally { setBusy(false); }
   }
 
@@ -81,7 +100,16 @@ export function ImportPage() {
         <input className="input flex-1" type="url" required placeholder="https://… a recipe page or an Osta link" aria-label="Recipe address" value={url} onChange={(e) => setUrl(e.target.value)} autoFocus />
         <button className="btn btn-accent" disabled={busy || !url.trim()}>{busy ? 'Reading…' : 'Import'}</button>
       </form>
-      <p className="text-sm text-muted">Works with most recipe websites and Osta share links. You can check and fix everything before it is saved.</p>
+      <p className="text-sm text-muted">Works with most recipe websites, Osta share links and Instagram posts. You can check and fix everything before it is saved.</p>
+      <details className="card p-3 text-sm" open={pasteOpen} onToggle={(e) => setPasteOpen(e.currentTarget.open)}>
+        <summary className="cursor-pointer font-medium">Paste a caption instead (Instagram, TikTok, a message…)</summary>
+        <form className="mt-3 space-y-3" onSubmit={(e) => void fetchText(e)}>
+          <p className="text-muted">Copy the post's caption and paste it here. If the creator put the recipe in a comment, paste that too. The link above (if filled in) is kept as the source.</p>
+          <label className="block"><span className="mb-1 block font-medium">Caption</span><textarea className="input min-h-[8rem] w-full" value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Ingredients:&#10;2 cups flour&#10;…" /></label>
+          <label className="block"><span className="mb-1 block font-medium">Recipe comment <span className="font-normal text-muted">(optional)</span></span><textarea className="input min-h-[5rem] w-full" value={comment} onChange={(e) => setComment(e.target.value)} /></label>
+          <button className="btn btn-accent" disabled={busy || !caption.trim()}>{busy ? 'Reading…' : 'Read it'}</button>
+        </form>
+      </details>
       {error && <p className="text-sm text-bad" role="alert">{error}</p>}
       {saveError && <p className="text-sm text-bad" role="alert">{saveError}</p>}
       {draft && (

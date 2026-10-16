@@ -3,9 +3,11 @@ import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createApp } from './app.ts';
-import { addUser, listUsers, openDb } from './db.ts';
+import { addUser, listUsers, openDb, resetUserToken } from './db.ts';
 import { Updater } from './update.ts';
 import { createBrowserRenderer } from './import/browser.ts';
+import { cacheAllRecipeImages } from './images.ts';
+import { safeFetchPicture } from './import/safeFetch.ts';
 
 /**
  * Configuration is by environment variable (systemd, a plain shell and the installer all do that):
@@ -15,6 +17,7 @@ import { createBrowserRenderer } from './import/browser.ts';
  * Accounts (run from packages/server, with the same TURBOPANTRY_DATA as the service):
  *   node --experimental-strip-types src/index.ts add-user <name>   makes an account and prints its token once; the first one is the owner
  *   node --experimental-strip-types src/index.ts users             lists the accounts
+ *   node --experimental-strip-types src/index.ts new-token <name>  a lost token: prints a new one for that account (the old one stops working); nothing else is lost
  */
 const dataDir = resolve(process.env.TURBOPANTRY_DATA ?? 'data');
 const db = openDb(resolve(dataDir, 'turbopantry.db'));
@@ -27,8 +30,16 @@ if (cmd === 'add-user') {
   catch (e) { console.error((e as Error).message.includes('UNIQUE') ? `There is already a user called ${name}.` : (e as Error).message); process.exit(1); }
   process.exit(0);
 }
+if (cmd === 'new-token') {
+  const name = rest.join(' ');
+  if (!name) { console.error('Usage: new-token <name>'); process.exit(2); }
+  const t = resetUserToken(db, name);
+  if (!t) { console.error(`There is no user called ${name}. See: users`); process.exit(1); }
+  console.log(`New token for ${name} (shown once, keep it safe; the old one no longer works):\n${t}`);
+  process.exit(0);
+}
 if (cmd === 'users') { for (const u of listUsers(db)) console.log(u.isAdmin ? `${u.name} (owner)` : u.name); process.exit(0); }
-if (cmd) { console.error(`Unknown command "${cmd}". Run with no command to start the server, or: add-user <name> | users`); process.exit(2); }
+if (cmd) { console.error(`Unknown command "${cmd}". Run with no command to start the server, or: add-user <name> | new-token <name> | users`); process.exit(2); }
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const repoRoot = resolve(here, '../../..');
@@ -48,6 +59,9 @@ const updater = offered ? new Updater({ script, restart: underSystemd, exit: () 
 const version = gitVersion();
 const port = Number(process.env.TURBOPANTRY_PORT ?? 47900);
 const host = process.env.TURBOPANTRY_HOST ?? '0.0.0.0';
-createApp({ db, webDir, updater, version, render: createBrowserRenderer() }).listen(port, host, () => {
+const imagesDir = resolve(dataDir, 'images');
+createApp({ db, webDir, imagesDir, updater, version, render: createBrowserRenderer() }).listen(port, host, () => {
   console.log(`TurboPantry ${version} on http://${host}:${port}  data: ${dataDir}  web: ${webDir ?? 'not found (API only)'}  self-update: ${updater ? 'on' : 'off'}`);
 });
+// photos saved before caching existed are fetched once, quietly, in the background
+void cacheAllRecipeImages(db, imagesDir, safeFetchPicture).then((n) => n && console.log(`Saved ${n} recipe photo${n === 1 ? '' : 's'} on this server.`)).catch(() => {});

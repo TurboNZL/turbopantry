@@ -17,7 +17,7 @@ const mins = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m 
 
 /** "have it", "have 3 of 5", "missing" next to a line, from the pantry. Says nothing for lines it cannot judge. */
 function StockChip({ st, item }: { st: StockStatus; item?: Item }) {
-  if (st.state === 'unlinked' || st.state === 'staple') return null;
+  if (st.state === 'unlinked') return null;
   const base = 'ml-2 inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium';
   if (st.state === 'enough') return <span className={cn(base, 'bg-good/15 text-good')}>have it</span>;
   if (st.state === 'some') return <span className={cn(base, 'bg-warn/15 text-warn')}>have {prettyStock(st.have ?? 0, st.unit)}</span>;
@@ -76,7 +76,7 @@ export function RecipePage() {
   // 0 means "not given" (some sources write "0 min"): never show it
   const prep = r.prepMinutes || null, cook = r.cookMinutes || null;
   const total = r.totalMinutes || (prep || cook ? (prep ?? 0) + (cook ?? 0) : null);
-  const needed = statuses.filter((s) => s.state !== 'enough' && s.state !== 'staple').length;
+  const needed = statuses.filter((s) => s.state !== 'enough').length;
   const unlinked = statuses.filter((s) => s.state === 'unlinked').length;
 
   async function remove(recipe: Recipe) {
