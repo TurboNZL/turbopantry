@@ -1,11 +1,19 @@
 import { useState } from 'react';
 import { ArrowDown, ArrowUp, Check, GripVertical, Plus, Trash2 } from 'lucide-react';
 import { GROUPS, groupOrder, sectionOf, type Store } from '@turbopantry/shared';
-import { useStores } from '../lib/data.ts';
+import { useItems, useListEntries, useStores } from '../lib/data.ts';
+import { Segmented } from './Segmented.tsx';
+import { StoreMap3D } from './floor3d/index.tsx';
 import { useStore } from '../lib/store.ts';
 import { toast } from '../lib/toast.ts';
 import { useApi } from '../lib/useApi.ts';
 import { cn } from '../lib/cn.ts';
+
+function MapPanel({ store }: { store: Store }) {
+  const { entries } = useListEntries();
+  const { items } = useItems();
+  return <StoreMap3D store={store} entries={entries} items={items} />;
+}
 
 function Layout({ store, onChanged }: { store: Store; onChanged(): void }) {
   const api = useApi();
@@ -14,6 +22,7 @@ function Layout({ store, onChanged }: { store: Store; onChanged(): void }) {
   const [drag, setDrag] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [name, setName] = useState(store.name);
+  const [view, setView] = useState<'order' | 'map'>('order');
 
   async function save(next: string[]) { try { await api.updateStore(store.id, { order: next }); onChanged(); } catch (e) { toast((e as Error).message); } }
   const move = (g: string, to: number) => { const rest = order.filter((x) => x !== g); rest.splice(Math.max(0, Math.min(rest.length, to)), 0, g); void save(rest); };
@@ -30,20 +39,23 @@ function Layout({ store, onChanged }: { store: Store; onChanged(): void }) {
         <button className={cn('btn h-11', mine && 'btn-accent')} onClick={() => updateSettings({ storeId: mine ? null : store.id })} aria-pressed={mine}>{mine ? <><Check size={16} className="mr-1 inline" />Shopping here</> : 'Shop here'}</button>
         <button className="btn h-11 !px-3" onClick={() => void remove()} aria-label="Delete layout"><Trash2 size={18} /></button>
       </div>
-      <p className="text-sm text-muted">The order you walk the shop in. Drag a group, or use the arrows. The shopping list follows it while “Shopping here” is on.</p>
-      <ol className="divide-y divide-line overflow-hidden rounded-theme border border-line">
-        {order.map((g, i) => (
-          <li key={g} draggable onDragStart={() => setDrag(g)} onDragEnd={() => { setDrag(null); setOver(null); }} onDragOver={(e) => { e.preventDefault(); setOver(g); }}
-            onDrop={(e) => { e.preventDefault(); if (drag && drag !== g) move(drag, i); setDrag(null); setOver(null); }}
-            className={cn('flex min-h-[2.75rem] items-center gap-2 bg-bg px-2', drag === g && 'opacity-40', over === g && drag !== g && 'border-t-2 border-accent')}>
-            <GripVertical size={16} className="shrink-0 cursor-grab text-muted" aria-hidden />
-            <span className="w-6 shrink-0 text-right text-xs text-muted tabular-nums">{i + 1}</span>
-            <span className="min-w-0 flex-1 truncate">{g}<span className="ml-2 text-xs text-muted">{sectionOf(g)}</span></span>
-            <button className="btn btn-ghost flex h-9 w-9 items-center justify-center !p-0" aria-label={`Move ${g} up`} disabled={i === 0} onClick={() => move(g, i - 1)}><ArrowUp size={16} /></button>
-            <button className="btn btn-ghost flex h-9 w-9 items-center justify-center !p-0" aria-label={`Move ${g} down`} disabled={i === order.length - 1} onClick={() => move(g, i + 1)}><ArrowDown size={16} /></button>
-          </li>
-        ))}
-      </ol>
+      {settings.view3d && <Segmented<'order' | 'map'> label="Store view" value={view} onChange={setView} options={[{ value: 'order', label: 'Order' }, { value: 'map', label: 'Map' }]} />}
+      {settings.view3d && view === 'map' ? <MapPanel store={store} /> : <>
+        <p className="text-sm text-muted">The order you walk the shop in. Drag a group, or use the arrows. The shopping list follows it while “Shopping here” is on.</p>
+        <ol className="divide-y divide-line overflow-hidden rounded-theme border border-line">
+          {order.map((g, i) => (
+            <li key={g} draggable onDragStart={() => setDrag(g)} onDragEnd={() => { setDrag(null); setOver(null); }} onDragOver={(e) => { e.preventDefault(); setOver(g); }}
+              onDrop={(e) => { e.preventDefault(); if (drag && drag !== g) move(drag, i); setDrag(null); setOver(null); }}
+              className={cn('flex min-h-[2.75rem] items-center gap-2 bg-bg px-2', drag === g && 'opacity-40', over === g && drag !== g && 'border-t-2 border-accent')}>
+              <GripVertical size={16} className="shrink-0 cursor-grab text-muted" aria-hidden />
+              <span className="w-6 shrink-0 text-right text-xs text-muted tabular-nums">{i + 1}</span>
+              <span className="min-w-0 flex-1 truncate">{g}<span className="ml-2 text-xs text-muted">{sectionOf(g)}</span></span>
+              <button className="btn btn-ghost flex h-9 w-9 items-center justify-center !p-0" aria-label={`Move ${g} up`} disabled={i === 0} onClick={() => move(g, i - 1)}><ArrowUp size={16} /></button>
+              <button className="btn btn-ghost flex h-9 w-9 items-center justify-center !p-0" aria-label={`Move ${g} down`} disabled={i === order.length - 1} onClick={() => move(g, i + 1)}><ArrowDown size={16} /></button>
+            </li>
+          ))}
+        </ol>
+      </>}
     </div>
   );
 }

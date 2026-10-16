@@ -12,7 +12,7 @@ The installer made the first account (the owner). To add the people you share wi
 Open the server's address. Go to **Settings → Server**, paste the token, press **Save and test**. It says who you are signed in as.
 
 ## 4. Make it yours
-**Settings → Appearance** has many colour themes and UI styles, four layouts (side bar, icon rail, top tabs, bottom dock) and an optional wallpaper. Your choices stay on this device.
+**Settings → Appearance** has many colour themes and UI styles, six layouts (side bar, floating side bar, icon rail, floating rail, top tabs, bottom dock) and an optional wallpaper. Your choices stay on this device.
 
 ## 5. Add your first recipe
 **Recipes → Import from a link** (see [IMPORTING.md](IMPORTING.md)), or **Write one**. Open a recipe to change the number of servings: the quantities scale with it. Amounts are in bold, the ingredients are bold inside the method, and **Amounts on/off** hides every quantity (in the list and in the method) when you just want to see what goes in.

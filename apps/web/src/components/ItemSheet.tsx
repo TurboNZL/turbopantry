@@ -16,6 +16,8 @@ export function patchForMode(item: Pick<Item, 'unit'>, mode: CountMode): { mode:
   return { mode, unit, ...defaultsForUnit(unit, mode) };
 }
 
+export const COUNT_UNIT_OPTIONS: [string, string][] = [['', 'each'], ['bag', 'bags'], ['bottle', 'bottles'], ['box', 'boxes'], ['can', 'cans'], ['jar', 'jars'], ['packet', 'packets'], ['bunch', 'bunches'], ['clove', 'cloves'], ['slice', 'slices'], ['piece', 'pieces']];
+export const WEIGHT_UNIT_OPTIONS: [string, string][] = [['g', 'grams'], ['kg', 'kg'], ['ml', 'ml'], ['l', 'litres']];
 export const MODE_OPTIONS = COUNT_MODES.map((m) => ({ value: m, label: COUNT_MODE_LABELS[m] }));
 
 /**
@@ -29,7 +31,6 @@ export function ItemSheet({ item, onClose, onSaved }: { item: Item; onClose(): v
   const [unit, setUnit] = useState(item.unit);
   const [step, setStep] = useState(item.step);
   const [defaultQty, setDefaultQty] = useState(item.defaultQty);
-  const [minQty, setMinQty] = useState(item.minQty);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -38,7 +39,7 @@ export function ItemSheet({ item, onClose, onSaved }: { item: Item; onClose(): v
     setBusy(true); setError(null);
     try {
       const renamed = name.trim() !== titleCase(item.name); // an untouched name keeps its real capitalisation
-      await api.updateItem(item.id, { ...(renamed ? { name: name.trim() } : {}), mode, unit, step, defaultQty, minQty });
+      await api.updateItem(item.id, { ...(renamed ? { name: name.trim() } : {}), mode, unit, step, defaultQty });
       onSaved(); onClose();
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
@@ -53,8 +54,12 @@ export function ItemSheet({ item, onClose, onSaved }: { item: Item; onClose(): v
       <label className="block"><span className={lab}>Name</span><input className="input h-11" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} /></label>
       <div><span className={lab}>How is it counted?</span><Segmented label="How it is counted" value={mode} options={MODE_OPTIONS} onChange={pick} /></div>
       {mode === 'chunks' && <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">One chunk is</span><Stepper label="chunk" value={step} step={unit === 'kg' || unit === 'l' ? 0.25 : 50} unit={unit} min={0.001} onChange={(v) => { setStep(v); setDefaultQty(v); }} /></div>}
-      <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">Keep at least <span className="font-normal text-muted">(0 = don't watch)</span></span><Stepper label="minimum" value={minQty} step={step} unit={unit} onChange={setMinQty} /></div>
-      <p className="text-sm"><Link to={`/settings?tab=items&item=${item.id}`} onClick={onClose} className="inline-flex min-h-[2.75rem] items-center gap-2 text-accent underline-offset-2 hover:underline"><SlidersHorizontal size={16} />More settings: aliases, shop group, units…</Link></p>
+      <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-sm font-medium">Usual amount to buy</span>
+        <span className="flex items-center gap-1">
+          <Stepper compact label="usual amount" value={defaultQty} step={step} unit={null} onChange={setDefaultQty} />
+          <select className="input h-10 !w-auto !py-0 text-sm" aria-label="Measured in" value={unit ?? ''} onChange={(e) => setUnit(e.target.value || null)}>{(mode === 'amount' ? COUNT_UNIT_OPTIONS : WEIGHT_UNIT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+        </span></div>
+      <p className="text-sm"><Link to={`/settings?tab=items&item=${item.id}`} onClick={onClose} className="inline-flex min-h-[2.75rem] items-center gap-2 text-accent underline-offset-2 hover:underline"><SlidersHorizontal size={16} />More settings: keep at least, aliases, shop group…</Link></p>
     </Sheet>
   );
 }

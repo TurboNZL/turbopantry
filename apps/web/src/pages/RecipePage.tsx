@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ChefHat, Clock, ExternalLink, Hash, Link2, Minus, Pencil, Plus, ShoppingCart, Trash2, Users } from 'lucide-react';
-import { UNIT_MODES, displayAmount, highlightStep, prettyStock, stockStatus, type Ingredient, type Item, type Recipe, type StockStatus } from '@turbopantry/shared';
+import { FolderPlus, Maximize2, ChefHat, Clock, ExternalLink, Hash, Link2, Minus, Pencil, Plus, ShoppingCart, Trash2, Users } from 'lucide-react';
+import { UNIT_MODES, formatQuantity, unscalableLines, displayAmount, highlightStep, prettyStock, stockStatus, type Ingredient, type Item, type Recipe, type StockStatus } from '@turbopantry/shared';
 import { CookSheet } from '../components/CookSheet.tsx';
+import { RecipeGroupsSheet } from '../components/RecipeGroupsSheet.tsx';
+import { RecipeFullscreen } from '../components/RecipeFullscreen.tsx';
 import { defaultChoices, IngredientLinker, resolveLinks, type Choices } from '../components/IngredientLinker.tsx';
 import { Sheet } from '../components/Sheet.tsx';
 import { LoadError } from '../components/SignInNotice.tsx';
@@ -60,14 +62,18 @@ export function RecipePage() {
   const [servings, setServings] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [sheet, setSheet] = useState<'cook' | 'link' | null>(null);
+  const [full, setFull] = useState(false);
+  const [groupsOpen, setGroupsOpen] = useState(false);
   const [choices, setChoices] = useState<Choices>({});
   const showQuantities = useStore((st) => st.settings.showQuantities);
   const mode = useStore((st) => st.settings.unitMode);
   const updateSettings = useStore((st) => st.updateSettings);
 
-  const base = r?.servings ?? 0;
+  // a recipe that does not say how many it serves still scales: as batches (½×, 1×, 2×…)
+  const known = !!r?.servings;
+  const base = r?.servings || 1;
   const shown = servings ?? base;
-  const factor = base > 0 ? shown / base : 1;
+  const factor = shown / base;
   const statuses = useMemo(() => (r ? r.ingredients.map((ing) => stockStatus(ing, factor, ing.itemId ? byId.get(ing.itemId) : undefined)) : []), [r, factor, byId]);
 
   if (error) return <LoadError error={error} />;
@@ -86,7 +92,7 @@ export function RecipePage() {
   }
   async function addMissing() {
     try {
-      const res = await api.addFromRecipe(r!.id, shown || null);
+      const res = await api.addFromRecipe(r!.id, known ? shown : null, undefined, factor);
       toast(res.added.length ? `Added ${res.added.length} to the list${res.skipped.length ? `, left off ${res.skipped.length} you have` : ''}${res.checkStock.length ? `. Check amounts: ${res.checkStock.join(', ')}` : ''}` : 'You have everything');
     } catch (e) { toast((e as Error).message); }
   }
@@ -110,6 +116,8 @@ export function RecipePage() {
         </div>
         {r.tags.length > 0 && <div className="flex flex-wrap gap-1.5">{r.tags.map((t) => <span key={t} className="chip">{t}</span>)}</div>}
         <div className="flex flex-wrap gap-2 pt-1">
+          <button className="btn h-11" onClick={() => setGroupsOpen(true)}><FolderPlus size={15} />Groups</button>
+          <button className="btn h-11" onClick={() => setFull(true)}><Maximize2 size={15} />Full screen</button>
           <Link to={`/recipes/${r.id}/edit`} className="btn h-11"><Pencil size={15} />Edit</Link>
           <button className="btn h-11" onClick={() => { setChoices(defaultChoices(r.ingredients, items)); setSheet('link'); }}><Link2 size={15} />Link items{unlinked ? ` (${unlinked})` : ''}</button>
           <button className="btn h-11" onClick={() => void remove(r)} disabled={deleting}><Trash2 size={15} />Delete</button>
@@ -120,11 +128,11 @@ export function RecipePage() {
         <section className="card space-y-3 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-semibold">Ingredients</h2>
-            {base > 0 && showQuantities && (
+            {showQuantities && (
               <div className="flex items-center gap-1 text-sm" role="group" aria-label="Servings">
-                <button className="btn btn-ghost flex h-11 w-11 items-center justify-center !p-0" aria-label="Fewer servings" onClick={() => setServings(Math.max(1, shown - 1))}><Minus size={16} /></button>
-                <span className="inline-flex min-w-[5.5rem] items-center justify-center gap-1 tabular-nums"><Users size={13} />{shown} {shown === 1 ? 'serving' : 'servings'}</span>
-                <button className="btn btn-ghost flex h-11 w-11 items-center justify-center !p-0" aria-label="More servings" onClick={() => setServings(shown + 1)}><Plus size={16} /></button>
+                <button className="btn btn-ghost flex h-11 w-11 items-center justify-center !p-0" aria-label="Fewer servings" onClick={() => setServings(Math.max(known ? 1 : 0.5, shown - (known ? 1 : 0.5)))}><Minus size={16} /></button>
+                <span className="inline-flex min-w-[5.5rem] items-center justify-center gap-1 tabular-nums"><Users size={13} />{known ? `${shown} ${shown === 1 ? 'serving' : 'servings'}` : `${formatQuantity(shown)}× batch`}</span>
+                <button className="btn btn-ghost flex h-11 w-11 items-center justify-center !p-0" aria-label="More servings" onClick={() => setServings(shown + (known ? 1 : 0.5))}><Plus size={16} /></button>
               </div>
             )}
           </div>
@@ -136,11 +144,12 @@ export function RecipePage() {
               </select>
             )}
           </div>
+          {factor !== 1 && showQuantities && unscalableLines(r.ingredients).length > 0 && <p className="rounded-theme bg-warn/15 p-3 text-sm" role="status">{unscalableLines(r.ingredients).length === 1 ? 'This line has an amount' : 'These lines have amounts'} that could not be read, so {unscalableLines(r.ingredients).length === 1 ? 'it stays' : 'they stay'} as written: {unscalableLines(r.ingredients).join('; ')}</p>}
           {r.ingredients.length ? <IngredientList items={r.ingredients} factor={factor} showQuantities={showQuantities} mode={mode} byId={byId} /> : <p className="text-sm text-muted">No ingredients.</p>}
         </section>
         <section className="space-y-3">
           <h2 className="font-semibold">Method</h2>
-          {r.steps.length ? <ol className="space-y-3">{r.steps.map((s, i) => <li key={i} className="flex gap-3"><span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-fg">{i + 1}</span><span>{highlightStep(s, r.ingredients, { hideQuantities: !showQuantities }).map((seg, k) => (seg.bold ? <strong key={k} className="font-semibold">{seg.text}</strong> : <span key={k}>{seg.text}</span>))}</span></li>)}</ol>
+          {r.steps.length ? <ol className="space-y-3">{r.steps.map((s, i) => <li key={i} className="flex gap-3"><span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-fg">{i + 1}</span><span>{highlightStep(s, r.ingredients, { hideQuantities: !showQuantities, factor }).map((seg, k) => (seg.bold ? <strong key={k} className="font-semibold">{seg.text}</strong> : <span key={k}>{seg.text}</span>))}</span></li>)}</ol>
             : <p className="text-sm text-muted">No method written down.</p>}
           {r.notes && <div className="card p-3 text-sm"><div className="mb-1 font-semibold">Notes</div><p className="whitespace-pre-line">{r.notes}</p></div>}
         </section>
@@ -152,6 +161,8 @@ export function RecipePage() {
         <button className="btn h-12 flex-1 shadow-lg" onClick={() => setSheet('cook')}><ChefHat size={18} />I cooked this</button>
       </div>
 
+      {groupsOpen && <RecipeGroupsSheet recipeId={r.id} title={r.title} current={r.groupIds ?? []} onClose={() => setGroupsOpen(false)} onSaved={reload} />}
+      {full && <RecipeFullscreen r={r} factor={factor} shown={shown} known={known} onServings={setServings} showQuantities={showQuantities} mode={mode} byId={byId} onClose={() => setFull(false)} />}
       {sheet === 'cook' && <CookSheet recipe={r} factor={factor} byId={byId} onClose={() => { setSheet(null); reloadItems(); }} />}
       {sheet === 'link' && (
         <Sheet title="Link items" onClose={() => setSheet(null)} footer={<button className="btn btn-accent h-12 w-full" onClick={() => void saveLinks()}>Save links</button>}>

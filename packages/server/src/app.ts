@@ -10,6 +10,10 @@ import { countOpen } from './list.ts';
 import { linkIngredients, suggestionsFor } from './link.ts';
 import { pantryRoutes } from './pantry-routes.ts';
 import { extraRoutes } from './extra-routes.ts';
+import { recipeGroupRoutes, withGroupIds, withGroups } from './recipe-groups.ts';
+import { instagramRoutes } from './instagram-routes.ts';
+import type { InstagramService } from './import/instagram-session.ts';
+import { layoutRoutes } from './layout-routes.ts';
 import { cacheImage, IMAGE_PATH, TYPE_OF } from './images.ts';
 import { importFromText, importFromUrl } from './import/index.ts';
 import type { Updater } from './update.ts';
@@ -36,10 +40,10 @@ export function corsHeaders(origin: string | undefined, allowed: string[]): Reco
   return origin && allowed.includes(origin) ? { 'access-control-allow-origin': origin, vary: 'Origin' } : null;
 }
 
-export interface AppOptions { db: Db; webDir?: string; /** Where recipe photos are kept (saved from the website when a recipe is saved). Absent = photos stay hotlinked. */ imagesDir?: string; fetchPicture?: PictureFetcher; /** How pages are fetched for import. Tests pass a fake; the default refuses private addresses. */ fetchPage?: PageFetcher; /** Renders JavaScript-only pages (Osta links). index.ts passes the real headless browser; tests pass a fake. */ render?: PageRenderer; /** Present only when this server can update itself (see update.ts and index.ts). */ updater?: Updater; /** Shown by /api/health. index.ts reads it from git (the newest tag, e.g. v2026.10.3). */ version?: string; /** Origins allowed to call /api from a page (CORS). Default: the Android app's http://localhost. */ corsOrigins?: string[] }
+export interface AppOptions { db: Db; webDir?: string; /** Where recipe photos are kept (saved from the website when a recipe is saved). Absent = photos stay hotlinked. */ imagesDir?: string; fetchPicture?: PictureFetcher; /** How pages are fetched for import. Tests pass a fake; the default refuses private addresses. */ fetchPage?: PageFetcher; /** Renders JavaScript-only pages (Osta links). index.ts passes the real headless browser; tests pass a fake. */ render?: PageRenderer; /** Present only when this server can update itself (see update.ts and index.ts). */ updater?: Updater; /** Shown by /api/health. index.ts reads it from git (the newest tag, e.g. v2026.10.3). */ version?: string; /** Origins allowed to call /api from a page (CORS). Default: the Android app's http://localhost. */ corsOrigins?: string[]; /** The owner's dummy Instagram login (index.ts makes it; tests pass one against a fake). Absent = Instagram links use the public embed page only. */ instagram?: InstagramService }
 
 /** The whole HTTP surface. Every /api route except /api/health needs a token: the server is meant to sit behind a public tunnel. */
-export function createApp({ db, webDir, imagesDir, fetchPicture = safeFetchPicture, fetchPage = safeFetchPage, render, updater, version = 'dev', corsOrigins = DEFAULT_CORS_ORIGINS }: AppOptions): Server {
+export function createApp({ db, webDir, imagesDir, fetchPicture = safeFetchPicture, fetchPage = safeFetchPage, render, updater, version = 'dev', corsOrigins = DEFAULT_CORS_ORIGINS, instagram }: AppOptions): Server {
   const hub = new Hub();
   const server = createServer((req, res) => {
     handle(req, res).catch((e) => {
@@ -95,6 +99,9 @@ export function createApp({ db, webDir, imagesDir, fetchPicture = safeFetchPictu
     if (path === '/api/events' && m === 'GET') { hub.join(req, res); return; }
     if (await pantryRoutes(path, m, req, res, db, user, hub)) return;
     if (await extraRoutes(path, m, req, res, db, user, hub)) return;
+    if (await recipeGroupRoutes(path, m, req, res, db, user, hub)) return;
+    if (await instagramRoutes(path, m, req, res, user, instagram)) return;
+    if (await layoutRoutes(path, m, req, res, db, user, hub)) return;
     if (path === '/api/admin/update') {
       if (!user.isAdmin) return json(res, 403, { error: 'Only the owner (the first account) can update the server.' });
       if (m === 'GET') return json(res, 200, { available: !!updater?.available, restarts: !!updater?.restarts, ...(updater?.state() ?? { status: 'idle', log: [], startedAt: null, restarting: false }) });
@@ -105,7 +112,7 @@ export function createApp({ db, webDir, imagesDir, fetchPicture = safeFetchPictu
       return json(res, 405, { error: 'Method not allowed' });
     }
     if (path === '/api/recipes') {
-      if (m === 'GET') return json(res, 200, listRecipes(db, url.searchParams.get('q') ?? ''));
+      if (m === 'GET') return json(res, 200, withGroups(db, listRecipes(db, url.searchParams.get('q') ?? ''), Number(url.searchParams.get('group')) || null));
       if (m === 'POST') {
         const r = validateRecipe(await readJson(req));
         if (typeof r === 'string') return json(res, 400, { error: r });
@@ -118,7 +125,7 @@ export function createApp({ db, webDir, imagesDir, fetchPicture = safeFetchPictu
     const one = /^\/api\/recipes\/(\d+)$/.exec(path);
     if (one) {
       const id = Number(one[1]);
-      if (m === 'GET') { const r = getRecipe(db, id); return r ? json(res, 200, r) : json(res, 404, { error: 'No such recipe' }); }
+      if (m === 'GET') { const r = getRecipe(db, id); return r ? json(res, 200, withGroupIds(db, r)) : json(res, 404, { error: 'No such recipe' }); }
       if (m === 'PUT') {
         const r = validateRecipe(await readJson(req));
         if (typeof r === 'string') return json(res, 400, { error: r });
@@ -134,7 +141,7 @@ export function createApp({ db, webDir, imagesDir, fetchPicture = safeFetchPictu
       const pasted = typeof body?.text === 'string' && body.text.trim() ? [body.text.slice(0, 20000), ...(Array.isArray(body.comments) ? body.comments.filter((c): c is string => typeof c === 'string').slice(0, 30).map((c) => c.slice(0, 20000)) : [])] : null;
       if (!pasted && (typeof body?.url !== 'string' || !body.url.trim())) return json(res, 400, { error: 'Send {"url": "https://..."} or {"text": "the caption"}', code: 'bad-url' });
       const link = typeof body?.url === 'string' && body.url.trim() ? body.url.trim() : null;
-      const result = pasted ? importFromText(pasted, link) : await importFromUrl(link!, { fetchPage, render });
+      const result = pasted ? importFromText(pasted, link) : await importFromUrl(link!, { fetchPage, render, instagram });
       if (!('recipe' in result)) return json(res, 422, result);
       // link what is already in the pantry (exact words only) and say what else it could be, so the review can confirm each line
       const linked = linkIngredients(db, result.recipe.ingredients);

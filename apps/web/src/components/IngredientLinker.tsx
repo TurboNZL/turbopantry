@@ -1,24 +1,28 @@
 import { useState } from 'react';
 import { Link2 } from 'lucide-react';
-import { cleanItemName, itemKey, matchItems, suggestItemUnit, type Ingredient, type Item, type MatchKind } from '@turbopantry/shared';
+import { cleanItemName, itemKey, matchItems, suggestItemUnit, titleCase, type Ingredient, type Item, type MatchKind } from '@turbopantry/shared';
 import type { Api } from '../lib/api.ts';
 
 /** What to do with one recipe line. Keyed by its ORIGINAL wording, which is never changed. */
-export type Choice = { kind: 'item'; id: number } | { kind: 'new'; name: string } | { kind: 'none' };
+export type Choice = { kind: 'item'; id: number; /** also remember the recipe's wording as another name of the item */ alias?: boolean } | { kind: 'new'; name: string } | { kind: 'none' };
 export type Choices = Record<string, Choice>;
 
 const KIND: Record<MatchKind, string> = { broader: 'less specific', narrower: 'more specific', related: 'similar' };
 
+const newName = (ing: Ingredient) => titleCase(cleanItemName(ing.name));
+
 /**
- * First choices: a line that is exactly an item (same words, or an alias you taught it) is linked; anything else is a NEW item with the line's
- * specifics kept ("Fettuccine pasta", not "Pasta"). Similar items are shown for you to pick, never chosen for you.
+ * First choices, the best guess for each line (all of them can be changed in the review): the same words as an item (or an alias you taught it) is
+ * linked; otherwise the closest item that is a clear relative (less or more specific: "Eggs" for "Coles free range eggs") is linked AND its
+ * wording is added as an alias; a line that merely shares a word ("penne pasta" / "fettuccine pasta") becomes a NEW item with its specifics kept.
  */
 export function defaultChoices(ings: Ingredient[], items: Item[]): Choices {
   const out: Choices = {};
   for (const ing of ings) {
     const have = ing.itemId ? items.find((i) => i.id === ing.itemId) : undefined;
     const m = matchItems(ing.name, items);
-    out[ing.raw] = have ? { kind: 'item', id: have.id } : m.exact ? { kind: 'item', id: m.exact.id } : { kind: 'new', name: cleanItemName(ing.name) };
+    const best = m.candidates.find((c) => c.kind !== 'related');
+    out[ing.raw] = have ? { kind: 'item', id: have.id } : m.exact ? { kind: 'item', id: m.exact.id } : best ? { kind: 'item', id: best.item.id, alias: true } : { kind: 'new', name: newName(ing) };
   }
   return out;
 }
@@ -32,12 +36,12 @@ export async function resolveLinks(api: Api, ings: Ingredient[], choices: Choice
     const c = choices[ing.raw] ?? base[ing.raw] ?? { kind: 'none' as const };
     if (c.kind === 'none') { out.push({ ...ing, itemId: null }); continue; }
     if (c.kind === 'new') {
-      const made = await api.createItem({ name: c.name.trim() || cleanItemName(ing.name), unit: suggestItemUnit(ing), tracked: false });
+      const made = await api.createItem({ name: c.name.trim() || newName(ing), unit: suggestItemUnit(ing), fromRecipe: true });
       out.push({ ...ing, itemId: made.id });
       continue;
     }
     const item = items.find((i) => i.id === c.id);
-    if (item && itemKey(item.name) !== itemKey(ing.name) && !item.aliases.some((a) => itemKey(a) === itemKey(ing.name)) && !learned.has(`${item.id}:${itemKey(ing.name)}`)) {
+    if (item && c.alias && itemKey(item.name) !== itemKey(ing.name) && !item.aliases.some((a) => itemKey(a) === itemKey(ing.name)) && !learned.has(`${item.id}:${itemKey(ing.name)}`)) {
       learned.add(`${item.id}:${itemKey(ing.name)}`);
       await api.updateItem(item.id, { addAlias: ing.name }).catch(() => undefined); // remembered: the same wording links by itself next time
     }
@@ -49,17 +53,28 @@ export async function resolveLinks(api: Api, ings: Ingredient[], choices: Choice
 function Row({ ing, items, choice, onPick }: { ing: Ingredient; items: Item[]; choice: Choice; onPick(c: Choice): void }) {
   const m = matchItems(ing.name, items);
   const value = choice.kind === 'item' ? `i${choice.id}` : choice.kind === 'new' ? 'new' : 'none';
-  const newName = choice.kind === 'new' ? choice.name : cleanItemName(ing.name);
+  const chosen = choice.kind === 'item' ? items.find((i) => i.id === choice.id) : undefined;
+  const isExact = !!chosen && (m.exact?.id === chosen.id || chosen.aliases.some((a) => itemKey(a) === itemKey(ing.name)));
   return (
     <div className="space-y-2 py-3">
       <div className="text-sm"><span className="text-muted">Recipe says </span><strong className="font-semibold">{ing.raw}</strong></div>
-      <select className="input h-11" aria-label={`What is ${ing.raw}`} value={value} onChange={(e) => { const v = e.target.value; onPick(v === 'none' ? { kind: 'none' } : v === 'new' ? { kind: 'new', name: newName } : { kind: 'item', id: Number(v.slice(1)) }); }}>
-        {m.exact && <option value={`i${m.exact.id}`}>In your list: {m.exact.name}</option>}
-        {m.candidates.map((c) => <option key={c.item.id} value={`i${c.item.id}`}>{c.item.name} ({KIND[c.kind]})</option>)}
-        {!m.exact && choice.kind === 'item' && !m.candidates.some((c) => c.item.id === choice.id) && <option value={`i${choice.id}`}>{items.find((i) => i.id === choice.id)?.name ?? 'Linked item'}</option>}
+      <select className="input h-11" aria-label={`What is ${ing.raw}`} value={value} onChange={(e) => {
+        const v = e.target.value;
+        if (v === 'none') return onPick({ kind: 'none' });
+        if (v === 'new') return onPick({ kind: 'new', name: newName(ing) });
+        const id = Number(v.slice(1)), it = items.find((i) => i.id === id);
+        onPick({ kind: 'item', id, alias: !!it && !(m.exact?.id === id || it.aliases.some((a) => itemKey(a) === itemKey(ing.name))) }); // a pick that is not already the same words offers to remember them
+      }}>
+        {m.exact && <option value={`i${m.exact.id}`}>In your list: {titleCase(m.exact.name)}</option>}
+        {m.candidates.map((c) => <option key={c.item.id} value={`i${c.item.id}`}>{titleCase(c.item.name)} ({KIND[c.kind]})</option>)}
+        {!m.exact && choice.kind === 'item' && !m.candidates.some((c) => c.item.id === choice.id) && <option value={`i${choice.id}`}>{titleCase(chosen?.name ?? 'Linked item')}</option>}
         <option value="new">A new item</option>
         <option value="none">Don't link</option>
       </select>
+      {choice.kind === 'item' && chosen && !isExact && (
+        <label className="flex min-h-[2.75rem] items-center gap-3 text-sm"><input type="checkbox" className="h-5 w-5 shrink-0" checked={!!choice.alias} onChange={(e) => onPick({ ...choice, alias: e.target.checked })} />
+          <span>Add “{ing.name}” as another name for <strong>{titleCase(chosen.name)}</strong> <span className="text-muted">(next time it links by itself)</span></span></label>
+      )}
       {choice.kind === 'new' && <input className="input h-11" aria-label="Name of the new item" value={choice.name} onChange={(e) => onPick({ kind: 'new', name: e.target.value })} />}
     </div>
   );

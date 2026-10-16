@@ -1,12 +1,15 @@
 import { parse } from 'node-html-parser';
 import { parseRecipeText, type ImportError, type ImportDraft } from '@turbopantry/shared';
 import { FetchError, type PageFetcher } from './safeFetch.ts';
+import type { InstagramReader } from './instagram-session.ts';
 
 /**
  * Instagram posts and reels. Osta reads the caption and the comments (it does not watch the video), and so does this, for free:
  *   1. the public embed page (instagram.com/p/<code>/embed/captioned/), fetched anonymously through the same guarded fetcher as every other site;
- *   2. when Instagram hides it (a login wall, a private post, a change on their side), the user pastes the caption and any recipe comment
- *      (the share sheet / paste box), which is read by exactly the same parser. That path cannot break.
+ *   2. when that gives no recipe, the owner's dummy-account session (instagram-session.ts): the post is opened in a logged-in headless browser and the
+ *      caption plus the visible comments (the creator's own first) are read;
+ *   3. when Instagram hides it anyway (a login wall, a private post, an expired session, a change on their side), the user pastes the caption and any
+ *      recipe comment (the share sheet / paste box), which is read by exactly the same parser. That path cannot break.
  * NOT verified against the live site (the build sandbox cannot reach Instagram): the embed markup is read by several independent strategies so one
  * change does not take everything down, and anything that is not found becomes the "paste it" message, never a wrong recipe.
  */
@@ -50,17 +53,39 @@ export function readEmbed(html: string): PostText | null {
   return { caption, comments, imageUrl: img ? img.replace(/&amp;/g, '&') : null };
 }
 
-const PASTE: ImportError = { code: 'unsupported', error: 'Instagram would not show that post without a login. Paste the caption (and the comment with the recipe, if there is one) into the box below instead.' };
+const PASTE_BASE = 'Instagram would not show that post without a login. Paste the caption (and the comment with the recipe, if there is one) into the box below instead.';
+const PASTE: ImportError = { code: 'unsupported', error: PASTE_BASE };
+const PASTE_CAN_LOG_IN: ImportError = { code: 'unsupported', error: `${PASTE_BASE} (The owner can also log TurboPantry in to a spare Instagram account in Settings, Server, so it can read posts itself.)` };
 
-/** Link import: the embed page, read as above. The error always points to the paste box. */
-export async function importInstagram(url: string, fetchPage: PageFetcher): Promise<ImportDraft | ImportError> {
+/**
+ * Link import: the anonymous embed page first, then the logged-in session when there is one, then the paste box message.
+ * `session` is optional so the importer still works (and the tests need no browser) without it.
+ */
+export async function importInstagram(url: string, fetchPage: PageFetcher, session?: InstagramReader): Promise<ImportDraft | ImportError> {
   const code = instagramCode(url);
   if (!code) return { code: 'unsupported', error: 'That Instagram link is not a post or a reel. Open the post and copy its link, or paste the caption below.' };
   let post: PostText | null = null;
   try { post = readEmbed((await fetchPage(`https://www.instagram.com/p/${code}/embed/captioned/`)).html); }
   catch (e) { if (!(e instanceof FetchError)) throw e; }
-  if (!post) return PASTE;
-  return fromText([post.caption, ...post.comments], url, post.imageUrl);
+  let first: ImportDraft | ImportError | null = null;
+  if (post) { first = fromText([post.caption, ...post.comments], url, post.imageUrl); if ('recipe' in first) return first; }
+  if (!session) return first ?? PASTE;
+  if (!session.hasSession()) return first ?? PASTE_CAN_LOG_IN;
+  try {
+    const p = await session.readPost(code);
+    // the creator's own comments are where the recipe usually is; other people's only when nothing else makes a recipe
+    const own = fromText([p.caption, ...p.ownerComments], url, p.imageUrl ?? post?.imageUrl ?? null);
+    if ('recipe' in own || !p.otherComments.length) return own;
+    const all = fromText([p.caption, ...p.ownerComments, ...p.otherComments], url, p.imageUrl ?? post?.imageUrl ?? null);
+    return 'recipe' in all ? all : own;
+  } catch (e) {
+    if (e instanceof FetchError) return { code: e.code, error: e.message };
+    if (e instanceof Error && e.name === 'InstagramError') {
+      const c = (e as Error & { code?: string }).code;
+      return { code: c === 'no-browser' ? 'no-browser' : c === 'rate' || c === 'failed' ? 'fetch-failed' : 'unsupported', error: e.message };
+    }
+    throw e;
+  }
 }
 
 /** Pasted text (the caption first, then any comments) read as a recipe. */

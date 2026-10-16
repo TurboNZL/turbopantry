@@ -5,6 +5,17 @@
   "out": {
     "svg": "apps/web/public/icon.svg",
     "mono": "apps/web/public/icon-mono.svg",
+    "symbolSvg": "apps/web/public/favicon.svg",
+    "symbolPng": [
+      [
+        "apps/web/public/favicon-32.png",
+        32
+      ],
+      [
+        "apps/web/public/favicon-48.png",
+        48
+      ]
+    ],
     "png": [
       [
         "apps/web/public/icon-512.png",
@@ -13,10 +24,6 @@
       [
         "apps/web/public/icon-192.png",
         192
-      ],
-      [
-        "apps/web/public/favicon-32.png",
-        32
       ]
     ],
     "android": {

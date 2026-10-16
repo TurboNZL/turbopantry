@@ -40,6 +40,25 @@ export function canonicalUnit(word: string): string | null {
   return null;
 }
 
+const WORD_NUMBERS: Record<string, string> = { a: '1', an: '1', one: '1', two: '2', three: '3', four: '4', five: '5', six: '6', seven: '7', eight: '8', nine: '9', ten: '10', eleven: '11', twelve: '12', dozen: '12' };
+
+/**
+ * Writes the ways people spell a leading amount in the one form the parser reads: "1⁄2" (fraction slash) and "1 / 2" become "1/2", ".5" becomes
+ * "0.5", "1/2-cup" becomes "1/2 cup", and "half a cup", "one cup", "two eggs", "a quarter cup" become digits. Only the start of the line is touched.
+ */
+export function normaliseQuantityText(text: string): string {
+  let t = text.replace(/[\u2044\u2215]/g, '/').replace(/^(\s*\d+)\s*\/\s*(\d+)/, '$1/$2').replace(/^\s*\.(\d)/, '0.$1');
+  t = t.replace(/^(\s*(?:\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:[.,]\d+)?))-(?=[A-Za-z])/, '$1 ');
+  const half = /^\s*(?:(?:a|one)\s+half|half(?:\s+an?)?)\s+(?=\S)/i.exec(t);
+  if (half) return `0.5 ${t.slice(half[0].length)}`;
+  const quarter = /^\s*(?:a|one)\s+(quarter|third)\s+(?:of\s+an?\s+|of\s+|an?\s+)?/i.exec(t);
+  if (quarter) return `${quarter[1]!.toLowerCase() === 'third' ? '1/3' : '1/4'} ${t.slice(quarter[0].length)}`;
+  const word = /^\s*(an?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|dozen)\s+(?!of\b)(?=\S)/i.exec(t);
+  // "a pinch of salt" stays words (no amount), but "one cup milk" and "two eggs" are amounts; a bare "a"/"an" is left alone
+  if (word && !/^an?$/i.test(word[1]!)) return `${WORD_NUMBERS[word[1]!.toLowerCase()]} ${t.slice(word[0].length)}`;
+  return t;
+}
+
 /**
  * Splits one ingredient line into quantity, unit, name and note. Never throws and never drops text: when it cannot find a
  * quantity the whole line becomes the name, and `raw` always holds the original.
@@ -50,7 +69,7 @@ export function canonicalUnit(word: string): string | null {
 export function parseIngredient(line: string, section: string | null = null): Ingredient {
   const raw = line.replace(/\s+/g, ' ').trim();
   const out: Ingredient = { raw, quantity: null, quantityMax: null, unit: null, name: raw, note: null, section };
-  let rest = raw;
+  let rest = normaliseQuantityText(raw);
 
   const m = LEADING.exec(rest);
   if (m) {
@@ -136,6 +155,11 @@ const COUNTED: Record<string, string> = { cup: 'cups', clove: 'cloves', can: 'ca
 export function unitLabel(unit: string | null, quantity: number | null): string | null {
   if (!unit || quantity === null || quantity <= 1) return unit;
   return COUNTED[unit] ?? unit;
+}
+
+/** Lines that start like an amount but whose amount could not be read, so they will NOT scale when the servings change (shown to the user, never silently ignored). */
+export function unscalableLines(items: Ingredient[]): string[] {
+  return items.filter((i) => i.quantity === null && /^\s*(?:\d|[¼½¾⅓⅔⅛]|(?:an?|one|two|three|four|five|six|half)\s+(?:cups?|tbsps?|tsps?|tablespoons?|teaspoons?|oz|lbs?|g|kg|ml|l)\b)/i.test(i.raw)).map((i) => i.raw);
 }
 
 export function scaleIngredient(i: Ingredient, factor: number): string {

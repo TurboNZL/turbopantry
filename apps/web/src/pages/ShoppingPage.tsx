@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Check, Pencil, Plus, ShoppingCart, Store as StoreIcon, Trash2, Package, ListChecks, PackageX } from 'lucide-react';
+import { Check, Plus, ShoppingCart, Store as StoreIcon, Trash2, Package, ListChecks, PackageX, ExternalLink } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { GROUPS, dimensionOf, formatStock, groupOrder, parseQuickAdd, searchItems, titleCase, type Item, type ListEntry } from '@turbopantry/shared';
 import { LoadError } from '../components/SignInNotice.tsx';
-import { Sheet } from '../components/Sheet.tsx';
 import { Stepper } from '../components/Stepper.tsx';
 import { useAddToList } from '../components/useAddToList.tsx';
 import { useRowMenu } from '../lib/contextMenu.tsx';
@@ -12,36 +12,27 @@ import { toast } from '../lib/toast.ts';
 import { useApi } from '../lib/useApi.ts';
 import { cn } from '../lib/cn.ts';
 
-function EntrySheet({ entry, onClose, onChanged }: { entry: ListEntry; onClose(): void; onChanged(): void }) {
-  const api = useApi();
-  const [qty, setQty] = useState(entry.qty ?? 0);
-  const [note, setNote] = useState(entry.note);
-  async function save() { try { await api.updateEntry(entry.id, { qty: entry.qty === null && qty === 0 ? null : qty, note }); onChanged(); onClose(); } catch (e) { toast((e as Error).message); } }
-  async function remove() { try { await api.deleteEntry(entry.id); onChanged(); onClose(); } catch (e) { toast((e as Error).message); } }
-  return (
-    <Sheet title={titleCase(entry.name)} onClose={onClose} footer={<div className="flex gap-2"><button className="btn h-11 !px-3" aria-label="Remove from the list" onClick={() => void remove()}><Trash2 size={18} /></button><button className="btn btn-accent h-11 flex-1" onClick={() => void save()}>Done</button></div>}>
-      <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">How much</span><Stepper label="amount" value={qty} step={entry.step} unit={entry.unit} onChange={setQty} /></div>
-      <label className="block"><span className="mb-1 block text-sm font-medium">Note</span><input className="input h-11" value={note} onChange={(e) => setNote(e.target.value)} placeholder="the tasty one, the big pack…" /></label>
-      {!entry.addsStock && <p className="text-sm text-muted">Buying this leaves the pantry count as it is.</p>}
-    </Sheet>
-  );
-}
+const LEAVE_MS = 340; // how long a crossed-off line shows its tick before it folds away
 
-function Line({ e, onBuy, onEdit, onQty, onRemove, onOut }: { e: ListEntry; onBuy(): void; onEdit(): void; onQty(v: number): void; onRemove(): void; onOut(): void }) {
+function Line({ e, leaving, onBuy, onView, onQty, onRemove, onOut }: { e: ListEntry; leaving: 'tick' | 'fold' | null; onBuy(): void; onView(): void; onQty(v: number): void; onRemove(): void; onOut(): void }) {
   const menu = useRowMenu(titleCase(e.name), () => [
     { label: 'Cross off (bought)', icon: <Check size={16} />, run: onBuy },
-    { label: 'Edit', icon: <Pencil size={16} />, run: onEdit },
+    { label: 'View in the pantry', icon: <Package size={16} />, run: onView },
     { label: 'I’m out of it', icon: <PackageX size={16} />, run: onOut },
     { label: 'Remove from the list', icon: <Trash2 size={16} />, danger: true, run: onRemove },
   ]);
   return (
-    <div {...menu} className="flex min-h-[3.5rem] items-center pl-1 pr-1">
-      <button className="flex min-h-[3.5rem] min-w-0 flex-1 items-center gap-2 text-left" onClick={onBuy} aria-label={`Cross off ${titleCase(e.name)}`}>
-        <span className="flex h-11 w-10 shrink-0 items-center justify-center"><span className="h-7 w-7 rounded-full border-2 border-line" /></span>
-        <span className="min-w-0"><span className="line-clamp-2 break-words font-medium">{titleCase(e.name)}</span>{e.note && <span className="block truncate text-xs text-muted">{e.note}</span>}</span>
-      </button>
-      {e.qty !== null && <Stepper compact label={titleCase(e.name)} value={e.qty} step={e.step} unit={e.unit} onChange={onQty} />}
-      <button className="btn btn-ghost flex h-10 w-10 shrink-0 items-center justify-center !p-0" aria-label={`Edit ${titleCase(e.name)}`} onClick={onEdit}><Pencil size={17} /></button>
+    <div className={cn('overflow-hidden transition-[max-height,opacity] duration-300 ease-out', leaving === 'fold' ? 'max-h-0 opacity-0' : 'max-h-28 opacity-100')}>
+      <div {...menu} className={cn('flex min-h-[3.5rem] items-center pl-1 pr-1 transition-colors duration-200', leaving && 'bg-good/10')}>
+        <button className="flex min-h-[3.5rem] min-w-0 flex-1 items-center gap-2 text-left" onClick={onBuy} disabled={!!leaving} aria-label={`Cross off ${titleCase(e.name)}`}>
+          <span className="flex h-11 w-10 shrink-0 items-center justify-center">
+            <span className={cn('flex h-7 w-7 items-center justify-center rounded-full border-2 transition-all duration-200', leaving ? 'scale-110 border-good bg-good text-white' : 'border-line')}>{leaving && <Check size={16} strokeWidth={3} />}</span>
+          </span>
+          <span className="min-w-0"><span className={cn('line-clamp-2 break-words font-medium transition-colors duration-200', leaving && 'text-muted line-through')}>{titleCase(e.name)}</span>{e.note && <span className="block truncate text-xs text-muted">{e.note}</span>}</span>
+        </button>
+        {e.qty !== null && !leaving && <Stepper compact label={titleCase(e.name)} value={e.qty} step={e.step} unit={e.unit} onChange={onQty} />}
+        {!leaving && <button className="btn btn-ghost flex h-10 w-10 shrink-0 items-center justify-center !p-0" aria-label={`View ${titleCase(e.name)} in the pantry`} title="View in the pantry" onClick={onView}><ExternalLink size={17} /></button>}
+      </div>
     </div>
   );
 }
@@ -79,7 +70,8 @@ export function ShoppingPage() {
   const { settings, updateSettings } = useStore();
   const [q, setQ] = useState('');
   const [view, setView] = useState<'list' | 'pantry'>('list');
-  const [edit, setEdit] = useState<ListEntry | null>(null);
+  const nav = useNavigate();
+  const [leaving, setLeaving] = useState<Record<number, 'tick' | 'fold'>>({});
   const toList = useAddToList(() => { reload(); reloadItems(); });
 
   const store = stores.find((s) => s.id === settings.storeId) ?? null;
@@ -99,15 +91,21 @@ export function ShoppingPage() {
   const low = items.filter((i) => i.tracked && i.minQty > 0 && i.qty <= i.minQty && !onList.has(i.id));
   const groups = order.map((c) => ({ c, rows: entries.filter((e) => e.category === c) })).filter((g) => g.rows.length);
 
-  const pick = (it: Item) => { setQ(''); void toList.add(it, parsed.qty ?? undefined, parsed.qty !== null ? parsed.unit : undefined); };
+  const pick = (it: Item) => { setQ(''); void toList.add(it, parsed.qty ?? undefined, parsed.unit ?? undefined); }; // a bare number has no unit: it is counted in the item's own
   async function create() {
     if (!parsed.words) return;
     try { await api.addToList({ name: parsed.words, ...(parsed.qty !== null ? { qty: parsed.qty, unit: parsed.unit } : {}) }); setQ(''); reload(); reloadItems(); toast(`${titleCase(parsed.words)} is on the list and in the pantry`); } catch (e) { toast((e as Error).message); }
   }
   async function submit() { if (!text) return; if (sugg[0] && (exact || sugg.length)) return pick(exact ?? sugg[0]); await create(); }
 
+  function cross(e: ListEntry) {
+    if (leaving[e.id]) return;
+    setLeaving((l) => ({ ...l, [e.id]: 'tick' }));                                       // the tick fills in and the name is struck through
+    window.setTimeout(() => setLeaving((l) => (e.id in l ? { ...l, [e.id]: 'fold' } : l)), LEAVE_MS); // then the line folds away
+    window.setTimeout(() => { void buy(e); setLeaving((l) => { const { [e.id]: _gone, ...rest } = l; return rest; }); }, LEAVE_MS + 300);
+  }
   async function buy(e: ListEntry) {
-    set((cur) => (cur ?? []).filter((x) => x.id !== e.id)); // gone at once
+    set((cur) => (cur ?? []).filter((x) => x.id !== e.id));
     try {
       const r = await api.updateEntry(e.id, { checked: true });
       reloadItems();
@@ -115,6 +113,11 @@ export function ShoppingPage() {
     } catch { reload(); }
   }
   async function step(e: ListEntry, qty: number) {
+    if (qty <= 0) { // none of it on the list means it is not on the list
+      set((cur) => (cur ?? []).filter((x) => x.id !== e.id));
+      try { await api.deleteEntry(e.id); toast(`${titleCase(e.name)} taken off the list`, async () => { await api.addToList({ ...(e.itemId ? { itemId: e.itemId } : { name: e.name }), qty: e.qty ?? 1, unit: e.unit }); reload(); }); } catch { reload(); }
+      return;
+    }
     set((cur) => (cur ?? []).map((x) => (x.id === e.id ? { ...x, qty } : x)));
     try { await api.updateEntry(e.id, { qty }); } catch { reload(); }
   }
@@ -134,7 +137,7 @@ export function ShoppingPage() {
       </div>
       <form className="sticky top-14 z-10 -mx-1 bg-bg/90 px-1 py-2 backdrop-blur md:top-16" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
         <div className="flex gap-2">
-          <input className="input h-12 flex-1 text-base" placeholder={view === 'pantry' ? 'Search the pantry' : 'Add: milk, 750 ch, 2kg flour…'} aria-label={view === 'pantry' ? 'Search the pantry' : 'Add to the list'} value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="done" autoCapitalize="none" />
+          <input className="input find-box h-12 flex-1 text-base" placeholder={view === 'pantry' ? 'Search the pantry' : 'Add: milk, 750 ch, 2kg flour…'} aria-label={view === 'pantry' ? 'Search the pantry' : 'Add to the list'} value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="done" autoCapitalize="none" />
           {view === 'list' && text && <button className="btn btn-accent h-12 px-4" aria-label={`Add ${text}`}><Plus size={20} /></button>}
           <button type="button" className={cn('btn h-12 px-3', view === 'pantry' && 'btn-accent')} aria-pressed={view === 'pantry'} onClick={() => setView(view === 'pantry' ? 'list' : 'pantry')} title={view === 'pantry' ? 'Back to the list' : 'Add from the pantry'}>
             {view === 'pantry' ? <><ListChecks size={18} className="mr-1.5 inline" />List</> : <><Package size={18} className="mr-1.5 inline" />Pantry</>}</button>
@@ -172,12 +175,11 @@ export function ShoppingPage() {
           <section key={c} className="space-y-1" aria-label={c}>
             <h2 className="px-1 text-xs font-semibold uppercase tracking-wider text-muted">{c}</h2>
             <div className="card divide-y divide-line overflow-hidden">
-              {rows.map((e) => <Line key={e.id} e={e} onBuy={() => void buy(e)} onEdit={() => setEdit(e)} onQty={(v) => void step(e, v)} onRemove={() => void remove(e)} onOut={() => void markOut(e)} />)}
+              {rows.map((e) => <Line key={e.id} e={e} leaving={leaving[e.id] ?? null} onBuy={() => cross(e)} onView={() => nav(`/pantry?item=${e.itemId}`)} onQty={(v) => void step(e, v)} onRemove={() => void remove(e)} onOut={() => void markOut(e)} />)}
             </div>
           </section>
         ))}
       </>}
-      {edit && <EntrySheet key={edit.id} entry={entries.find((x) => x.id === edit.id) ?? edit} onClose={() => setEdit(null)} onChanged={reload} />}
       {toList.node}
     </div>
   );

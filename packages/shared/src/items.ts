@@ -20,8 +20,10 @@ export interface Item {
   minQty: number;
   /** How it is counted: whole things (eggs), weight in packs of a set size (chicken in 500 g chunks), or plain weight/volume (flour). Drives the + and - and the defaults. */
   mode: CountMode;
-  /** Shown in the pantry. Items made only by linking a recipe stay out of it until stocked. */
+  /** In the pantry (every item is; kept for older data). */
   tracked: boolean;
+  /** Only a recipe knows it: made by linking, never stocked, none now. Hidden in the pantry unless asked for. */
+  recipeOnly: boolean;
   /** Overrides the built-in weight of a cup for this item. */
   gramsPerCup: number | null;
   place: string | null;

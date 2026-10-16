@@ -90,7 +90,7 @@ async function route(path: string, m: string, req: IncomingMessage, res: ServerR
     const recipe = isObj(body) && Number.isInteger(body.recipeId) ? getRecipe(db, body.recipeId as number) : null;
     if (!isObj(body) || !recipe) { bad(res, 'No such recipe', 404); return true; }
     const servings = typeof body.servings === 'number' && body.servings > 0 ? body.servings : recipe.servings;
-    const factor = recipe.servings && servings ? servings / recipe.servings : 1;
+    const factor = typeof body.factor === 'number' && body.factor > 0 && body.factor <= 1000 ? body.factor : recipe.servings && servings ? servings / recipe.servings : 1; // a recipe without servings scales by batches
     const only = Array.isArray(body.only) ? body.only.filter((n): n is number => Number.isInteger(n)) : undefined;
     const result = addRecipeShortfall(db, recipe, factor, user.name, only);
     hub.send('list', user.name); json(res, 200, result); return true;

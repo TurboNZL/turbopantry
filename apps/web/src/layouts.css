@@ -3,6 +3,22 @@
  * Every rule is scoped to its own [data-layout]. Loaded after the themes' stylesheet (lib/appearance.ts) so they win ties with a style.
  */
 
+/* ---- floating / floating-rail (engine module `layouts`): the side bar is a rounded panel with a gap around it; Liquid Glass floats its own bars and is left alone ---- */
+@media (min-width: 768px) {
+  [data-layout="floating"]:not([data-ui="liquid"]) .bt-frame, [data-layout="floating-rail"]:not([data-ui="liquid"]) .bt-frame { gap: var(--float-gap, 12px); padding: var(--float-gap, 12px); }
+  [data-layout="floating"]:not([data-ui="liquid"]) .bt-side {
+    align-self: stretch; border: var(--bar-border); border-radius: var(--side-r, calc(var(--radius, 14px) * 1.6));
+    box-shadow: var(--side-shadow, none), 0 10px 30px -12px rgb(0 0 0 / 0.35);
+  }
+  [data-layout="floating"] .bt-side { overflow: hidden; }
+  [data-layout="floating-rail"] .bt-side.bt-shell { width: 4.5rem; padding: 0.75rem 0.5rem; align-items: center; align-self: center; height: auto; max-height: 100%; overflow: hidden;
+    border: var(--bar-border); border-radius: 9999px; box-shadow: var(--side-shadow, none), 0 10px 30px -12px rgb(0 0 0 / 0.35); }
+  [data-layout="floating-rail"] .bt-side .bt-label-text { display: none; }
+  [data-layout="floating-rail"] .bt-side .bt-nav { justify-content: center; padding: 0.65rem; width: 100%; border-radius: 9999px; }
+  [data-layout="floating-rail"] .bt-side .bt-brand { padding: 0; margin-bottom: 0.5rem; justify-content: center; }
+  [data-layout="floating-rail"] .bt-side .bt-brand img { display: block; }
+}
+
 /* ---- rail ---- */
 /* ---- Layouts (lib/layout.ts): where the pages are listed, whatever the look.  ---- */
 /* Icon rail */

@@ -59,3 +59,12 @@ textarea.input { border-radius: min(var(--in-r, var(--ctl-r, 8px)), 1.25rem); pa
 @keyframes draw-outline { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 .undo-outline { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw-outline var(--undo-ms, 10s) linear forwards; }
 @media (prefers-reduced-motion: reduce) { .undo-outline { animation-duration: var(--undo-ms, 10s); } }
+
+/* an item that was just opened from a link flashes once so it is easy to find */
+.bt-flash { animation: bt-row-flash 1.6s ease-out 1; }
+
+/* the find-or-add boxes: some UI styles (Spotify) give inputs a transparent border on a surface of the same colour, which makes the box vanish until it is focused */
+.find-box { border: 1px solid hsl(var(--line)) !important; background: hsl(var(--raised)); }
+.find-box:focus { border-color: hsl(var(--accent)) !important; }
+
+.chip[aria-pressed="true"] { background: hsl(var(--accent)); color: hsl(var(--accent-fg)); }

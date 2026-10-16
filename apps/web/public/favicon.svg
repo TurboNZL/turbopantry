@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="161.02 161.02 189.95 189.95" width="512" height="512" role="img" aria-label="TurboPantry">
+  <defs><linearGradient id="turbopantry-sym" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8febc9"/><stop offset="1" stop-color="#1b9862"/></linearGradient></defs>
+  <path d="M213.6,171.2L298.4,171.2L298.4,200.88L213.6,200.88ZM226.32,209.36L285.68,209.36L319.6,239.04L319.6,256L192.4,277.2L192.4,239.04ZM319.6,272.96L319.6,319.6L298.4,340.8L213.6,340.8L192.4,319.6L192.4,294.16Z" fill="url(#turbopantry-sym)"/>
+</svg>

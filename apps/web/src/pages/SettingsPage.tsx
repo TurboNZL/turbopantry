@@ -5,8 +5,11 @@ import { Section } from '../components/Section.tsx';
 import { ItemsTab } from '../components/ItemsTab.tsx';
 import { StoresTab } from '../components/StoresTab.tsx';
 import { PairCard, ServerCard } from '../components/ServerCard.tsx';
+import { InstagramCard } from '../components/InstagramCard.tsx';
 import { ServerUpdateCard } from '../components/ServerUpdate.tsx';
+import { View3dCard } from '../components/View3dCard.tsx';
 import { ThemeUpdates } from '../components/ThemeUpdates.tsx';
+import { ErrorBoundary } from '../components/ErrorBoundary.tsx';
 import { cn } from '../lib/cn.ts';
 
 const TABS = [{ id: 'look', label: 'Appearance' }, { id: 'items', label: 'Items' }, { id: 'stores', label: 'Stores' }, { id: 'server', label: 'Server' }, { id: 'guides', label: 'Guides' }];
@@ -27,12 +30,15 @@ export function SettingsPage() {
       {tab === 'look' && <>
         <AppearanceLayout />
         <Section title="Wallpaper"><WallpaperCard /></Section>
+        <View3dCard />
         <ThemeUpdates />
       </>}
+      <ErrorBoundary key={tab} label={`The ${tab} tab`}>
       {tab === 'items' && <ItemsTab />}
       {tab === 'stores' && <StoresTab />}
-      {tab === 'server' && <><ServerUpdateCard /><ServerCard /><PairCard /></>}
+      {tab === 'server' && <><ServerUpdateCard /><ServerCard /><PairCard /><InstagramCard /></>}
       {tab === 'guides' && <GuidesTab />}
+      </ErrorBoundary>
     </div>
   );
 }

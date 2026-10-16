@@ -66,3 +66,16 @@ describe('highlightStep', () => {
     expect(() => highlightStep('Add 1 (big) c++ thing.', ing('2 tbsp c++ (spicy) [mix]'))).not.toThrow();
   });
 });
+
+describe('amounts in the method scale with the servings', () => {
+  const rice = [parseIngredient('1/2 cup rice'), parseIngredient('200 g bacon'), parseIngredient('2 cloves garlic')];
+  const text = (segs: { text: string }[]) => segs.map((s) => s.text).join('');
+  it.each([
+    ['Simmer the 1/2 cup rice gently.', 2, 'Simmer the 1 cup rice gently.'],
+    ['Add 200g bacon and fry for 4 minutes.', 2, 'Add 400g bacon and fry for 4 minutes.'],
+    ['Add 2 cloves garlic.', 3, 'Add 6 cloves garlic.'],
+    ['Add 1/2 cup of rice.', 0.5, 'Add \u00bc cup of rice.'],
+    ['Cook the rice for 20 minutes at 180\u00b0C.', 2, 'Cook the rice for 20 minutes at 180\u00b0C.'],
+  ])('%s x%s', (step, factor, want) => expect(text(highlightStep(step, rice, { factor }))).toBe(want));
+  it('leaves the text alone at 1x', () => expect(text(highlightStep('Simmer the 1/2 cup rice gently.', rice, { factor: 1 }))).toBe('Simmer the 1/2 cup rice gently.'));
+});

@@ -60,7 +60,7 @@ function CandyDefs() {
 
 /**
  * The shell. Markup carries the themes' hook classes (bt-side, bt-top, bt-nav, bt-tabbar ...); where the pages are listed is the user's
- * layout choice (lib/layout.ts, layouts.css): side bar, icon rail, top tabs or a bottom dock. The phone always gets the bottom bar.
+ * layout choice (lib/layout.ts, layouts.css): side bar, floating side bar, icon rail, floating rail, top tabs or a bottom dock. The phone always gets the bottom bar.
  */
 export function Layout() {
   const nav = useNavigate();
@@ -76,12 +76,13 @@ export function Layout() {
   const layout = useStore((s) => s.settings.layout);
   const topbar = layout === 'topbar', dock = layout === 'dock';
   const noSide = topbar || dock; // these layouts have no side bar at all
-  const logo = '/icon.svg';
+  // 26-28 px logos are small icons: per the engine's logos rule 3 they are the coloured emblem symbol alone (favicon.svg), not the full mark (icon.svg)
+  const logo = '/favicon.svg';
   return (
     <div className="flex h-full flex-col">
       {effectiveUi(ui) === 'lgux' && <CandyDefs />}
       <div className="bt-scrim" aria-hidden />
-      <div className="flex min-h-0 flex-1">
+      <div className="bt-frame flex min-h-0 flex-1">
         {!noSide && <aside ref={sideRef} className="bt-side bt-shell relative hidden w-56 shrink-0 flex-col gap-1 p-3 md:flex">
           <span className="bt-ind" aria-hidden />
           <div className="bt-brand mb-3 flex items-center gap-2.5 px-3 pt-1 text-lg font-bold tracking-tight"><img src={logo} alt="" width={26} height={26} className="h-[26px] w-[26px] shrink-0" draggable={false} /><span className="bt-label-text">TurboPantry</span></div>
