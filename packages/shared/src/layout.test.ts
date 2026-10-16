@@ -26,6 +26,10 @@ describe('layout geometry', () => {
     expect(freeSpot([blk()], 2, 2, 16)).toEqual({ x: 2, y: 0 });
     expect(freeSpot([blk({ w: 4, d: 4 })], 4, 4, 4)).toBeNull();
   });
+  it('can look for the free spot nearest a point', () => {
+    expect(freeSpot([], 2, 2, 16, 0, { x: 8, y: 8 })).toEqual({ x: 7, y: 7 });
+    expect(freeSpot([blk({ x: 7, y: 7, w: 2, d: 2 })], 2, 2, 16, 0, { x: 8, y: 8 })).not.toEqual({ x: 7, y: 7 });
+  });
   it('places presets without overlap, numbers repeated names, and duplicates', () => {
     let blocks: Block[] = [];
     for (let i = 0; i < 3; i++) { const b = blockFromPreset(blocks, KITCHEN_PRESETS.find((p) => p.kind === 'cupboard')!, 16)!; blocks = [...blocks, b]; }

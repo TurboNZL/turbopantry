@@ -89,7 +89,7 @@ export function LayoutEditor({ kind, layout, onSave, onDone, cam }: { kind: Layo
   const remove = () => { if (!sel) return; commit(renumber(blocks.filter((b) => b.id !== sel.id))); setSelectedId(null); setTab('add'); };
   const add = (i: number) => {
     if (blocks.length >= MAX_BLOCKS) { toast(`That is the most blocks a plan can have (${MAX_BLOCKS}).`); return; }
-    const b = blockFromPreset(blocks, presetsFor(kind)[i]!, size);
+    const b = blockFromPreset(blocks, presetsFor(kind)[i]!, size, { x: size / 2, y: size / 2 });
     if (!b) { toast('There is no free space left on the floor. Make something smaller or delete a block.'); return; }
     commit([...blocks, b]); setSelectedId(b.id); setTab('edit');
   };
@@ -130,12 +130,12 @@ export function LayoutEditor({ kind, layout, onSave, onDone, cam }: { kind: Layo
 
   const presets = presetsFor(kind);
   return (
-    <div className="space-y-3">
-      <div className="z-20 -mx-1 space-y-2 bg-bg px-1 pb-2 pt-1 [@media(min-height:700px)]:sticky [@media(min-height:700px)]:top-0">
+    <div className="space-y-3 lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-5 lg:space-y-0">
+      <div className="z-20 -mx-1 space-y-2 bg-bg px-1 pb-2 pt-1 top-14 md:top-16 [@media(min-height:700px)]:sticky">
         <div className="flex items-center gap-2">
           <button className="btn flex h-11 w-11 items-center justify-center !p-0" onClick={undo} disabled={!past.length} aria-label="Undo"><Undo2 size={18} /></button>
           <button className="btn flex h-11 w-11 items-center justify-center !p-0" onClick={redo} disabled={!future.length} aria-label="Redo"><Redo2 size={18} /></button>
-          {kind === 'store' && <button className={cn('btn flex h-11 items-center gap-1.5 px-3', walkMode && 'btn-accent')} aria-pressed={walkMode} onClick={() => { setWalkMode(!walkMode); }}><Footprints size={18} />Walking order</button>}
+          {kind === 'store' && <button className={cn('btn flex h-11 items-center gap-1.5 whitespace-nowrap px-3', walkMode && 'btn-accent')} aria-pressed={walkMode} onClick={() => { setWalkMode(!walkMode); }}><Footprints size={18} />Walk order</button>}
           <span className="flex-1" />
           <button className="btn btn-accent flex h-11 items-center gap-1.5 px-4" onClick={() => { if (dirty.current) { dirty.current = false; onSave({ blocks: blocksRef.current }); } onDone(); }}><Check size={18} />Done</button>
         </div>
@@ -145,7 +145,7 @@ export function LayoutEditor({ kind, layout, onSave, onDone, cam }: { kind: Layo
             <button className="btn h-9 px-3" onClick={() => commit(blocks.map(({ walk: _w, ...r }) => r as Block))} disabled={!blocks.some((b) => b.walk !== undefined)}>Clear</button>
           </div>
         )}
-        <Scene3D cam={cam} size={size} blocks={blocks} selectedId={selectedId} editable={!walkMode} info={info} height="clamp(200px, 36vh, 460px)"
+        <Scene3D cam={cam} size={size} blocks={blocks} selectedId={selectedId} editable={!walkMode} info={info} compact
           label={kind === 'pantry' ? 'Kitchen layout builder' : 'Shop layout builder'}
           onTap={tap} onDragStart={(id) => { dragBase.current = blocksRef.current; setSelectedId(id); }}
           onMove={(id, x, y) => apply(blocksRef.current.map((b) => (b.id === id ? { ...b, x, y } : b)))}
@@ -153,6 +153,8 @@ export function LayoutEditor({ kind, layout, onSave, onDone, cam }: { kind: Layo
           onKey={onKey} />
         <CameraPad cam={cam} />
       </div>
+
+      <div className="space-y-3">
 
       <div role="tablist" aria-label="Builder" className="grid grid-cols-2 gap-1 rounded-theme border border-line bg-raised p-1">
         {(['add', 'edit'] as const).map((t) => (
@@ -217,6 +219,8 @@ export function LayoutEditor({ kind, layout, onSave, onDone, cam }: { kind: Layo
           )}
         </div>
       ) : <div className="card p-6 text-center text-sm text-muted">Tap a block on the floor to change it.</div>)}
+
+      </div>
 
       {groupsFor && sel && <GroupSheet block={sel} onChange={(groups) => change(sel.id, { groups }, `groups:${sel.id}`)} onClose={() => setGroupsFor(false)} />}
     </div>

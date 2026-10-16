@@ -22,8 +22,8 @@ export interface CameraApi {
   /** Move the view by screen pixels (the floor follows). */
   panBy(dx: number, dy: number): void;
   reset(): void;
-  /** The zoom that fits the whole floor (set by the scene once it knows its width). */
-  setFit(z: number): void;
+  /** What "fit" means: this zoom, looking at this point of the floor (pixels from its centre). Set by the scene; `content` says whether blocks drive it. */
+  setFit(z: number, cx: number, cy: number, content: boolean): void;
   /** Always the latest camera, for event handlers. */
   ref: { current: Cam };
 }
@@ -34,9 +34,15 @@ export function useCamera(): CameraApi {
   const [drag, setDrag] = useState<'pan' | 'orbit'>('pan');
   const ref = useRef(cam);
   ref.current = cam;
-  const fit = useRef(0.6);
-  const fitted = useRef(false);
-  const patch = useCallback((f: (c: Cam) => Cam) => { const n = f(ref.current); ref.current = n; setCam(n); }, []);
+  const fit = useRef({ z: 0.6, cx: 0, cy: 0 });
+  const stage = useRef(0); // 0 nothing fitted yet, 1 fitted to the empty floor, 2 fitted to the blocks
+  const touched = useRef(false);
+  const set = useCallback((n: Cam) => { ref.current = n; setCam(n); }, []);
+  const patch = useCallback((f: (c: Cam) => Cam) => { touched.current = true; set(f(ref.current)); }, [set]);
+  const home = useCallback((): Cam => {
+    const { z, cx, cy } = fit.current, a = (HOME.yaw * Math.PI) / 180, p = (HOME.pitch * Math.PI) / 180;
+    return { ...HOME, zoom: z, px: -z * (cx * Math.cos(a) - cy * Math.sin(a)), py: -z * (cx * Math.sin(a) + cy * Math.cos(a)) * Math.cos(p) };
+  }, []);
   return {
     cam, drag, setDrag, ref,
     turn: useCallback((deg) => patch((c) => ({ ...c, yaw: ((c.yaw + deg) % 360 + 360) % 360 })), [patch]),
@@ -44,8 +50,11 @@ export function useCamera(): CameraApi {
     zoomBy: useCallback((f) => patch((c) => ({ ...c, zoom: clamp(c.zoom * f, MIN_ZOOM, MAX_ZOOM) })), [patch]),
     setZoom: useCallback((z) => patch((c) => ({ ...c, zoom: clamp(z, MIN_ZOOM, MAX_ZOOM) })), [patch]),
     panBy: useCallback((dx, dy) => patch((c) => ({ ...c, px: clamp(c.px + dx, -1500, 1500), py: clamp(c.py + dy, -1500, 1500) })), [patch]),
-    reset: useCallback(() => patch(() => ({ ...HOME, zoom: fit.current })), [patch]),
-    setFit: useCallback((z) => { const first = !fitted.current; fitted.current = true; fit.current = clamp(z, MIN_ZOOM, MAX_ZOOM); if (first) patch((c) => ({ ...c, zoom: fit.current })); }, [patch]),
+    reset: useCallback(() => { touched.current = false; set(home()); }, [set, home]),
+    setFit: useCallback((z, cx, cy, content) => {
+      fit.current = { z: clamp(z, MIN_ZOOM, MAX_ZOOM), cx, cy };
+      if (stage.current === 0) { stage.current = content ? 2 : 1; set(home()); }
+    }, [set, home]),
   };
 }
 
