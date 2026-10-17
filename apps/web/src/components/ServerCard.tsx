@@ -5,6 +5,7 @@ import { Api } from '../lib/api.ts';
 import { useStore } from '../lib/store.ts';
 import { decodePairCode, encodePairCode, pairLink } from '../lib/pairCode.ts';
 import { toast } from '../lib/toast.ts';
+import { speedTest, type SpeedLine } from '../lib/speedTest.ts';
 
 /** Where this device signs in: the server that served the page by default, or another address (the Android app has no page origin). */
 export function ServerCard() {
@@ -14,6 +15,9 @@ export function ServerCard() {
   const [cfId, setCfId] = useState(settings.cfAccessId);
   const [cfSecret, setCfSecret] = useState(settings.cfAccessSecret);
   const [result, setResult] = useState<string | null>(null);
+  const [speed, setSpeed] = useState<SpeedLine[] | 'running' | null>(null);
+  const headers = (): Record<string, string> => (cfId.trim() && cfSecret.trim() ? { 'CF-Access-Client-Id': cfId.trim(), 'CF-Access-Client-Secret': cfSecret.trim() } : {});
+  async function runSpeed() { setSpeed('running'); setSpeed(await speedTest(url.trim().replace(/\/+$/, ''), headers(), token.trim())); }
 
   async function test() {
     setResult('Checking…');
@@ -22,9 +26,12 @@ export function ServerCard() {
       const h = await api.health();
       try { const s = await api.status(); setResult(`Signed in as ${s.user}. Server ${h.version}.`); }
       catch (e) { setResult((e as Error).message === 'Wrong token' ? 'Server found, but the token is wrong.' : `Server found (${h.version}), but sign-in failed.`); }
-    } catch { setResult(`Cannot reach the server at that address.${cfId ? ' With Cloudflare Access in front, also check the service token.' : ''}`); }
+    } catch (e) {
+      const m = (e as Error).message;
+      setResult(/^(401|403)$|Server said 40[13]/.test(m) ? 'Cloudflare Access turned the request away: check the service token (and that the Access policy action is Service Auth).' : `Cannot reach the server at that address.${cfId ? ' With Cloudflare Access in front, also check the service token and the CORS setting described above.' : ''}`);
+    }
   }
-  const save = () => { updateSettings({ serverUrl: url.trim(), token: token.trim(), cfAccessId: cfId.trim(), cfAccessSecret: cfSecret.trim() }); void test(); };
+  const save = () => { updateSettings({ serverUrl: url.trim().replace(/\/+$/, ''), token: token.trim(), cfAccessId: cfId.trim(), cfAccessSecret: cfSecret.trim() }); void test(); };
 
   return (
     <Section title="Server">
@@ -36,15 +43,21 @@ export function ServerCard() {
       <details className="text-sm">
         <summary className="cursor-pointer font-medium">Cloudflare Access <span className="font-normal text-muted">(only if the server sits behind it)</span></summary>
         <div className="mt-2 space-y-3">
-          <p className="text-muted">A service token lets this device pass Cloudflare Access without a login page. Use the token's Client ID and Client Secret. Kept on this device only.</p>
+          <p className="text-muted">Only if the server is behind Cloudflare Access with a Service Auth policy. Create a service token in Zero Trust (Access › Service credentials), add it to the policy, and paste the two halves here. They are sent as <code>CF-Access-Client-Id</code> and <code>CF-Access-Client-Secret</code> on every request. Kept on this device only; this is separate from the access token above, which TurboPantry itself checks.</p>
           <label className="block"><span className="mb-1 block font-medium">Client ID</span><input className="input" value={cfId} onChange={(e) => setCfId(e.target.value)} autoComplete="off" autoCapitalize="off" spellCheck={false} /></label>
           <label className="block"><span className="mb-1 block font-medium">Client Secret</span><input type="password" className="input" value={cfSecret} onChange={(e) => setCfSecret(e.target.value)} autoComplete="off" /></label>
+          <p className="text-xs text-muted">From the web client on the server&apos;s own address nothing else is needed. From another origin (the Android app) the browser first sends a preflight request that Access must let through: in the Access application&apos;s CORS settings turn on <em>Bypass options requests to origin</em> (the app also answers preflights itself), and turn the <em>binding cookie</em> off.</p>
         </div>
       </details>
       <div className="flex flex-wrap items-center gap-2">
+        <button className="btn" onClick={() => void test()}>Test connection</button>
+        <button className="btn" onClick={() => void runSpeed()} disabled={speed === 'running'} title="Times the server and tells whether Cloudflare Access accepts the token">Speed test</button>
         <button className="btn btn-accent" onClick={save}>Save and test</button>
-        {result && <span className="text-sm text-muted" aria-live="polite">{result}</span>}
       </div>
+      {speed && <div className="rounded-theme border border-line p-3 text-sm" role="status" aria-live="polite">
+        {speed === 'running' ? 'Measuring…' : <ul className="space-y-1">{speed.map((l) => <li key={l.label} className="flex flex-wrap items-baseline gap-x-3"><span className="w-64 shrink-0">{l.label}</span><b className="w-20 shrink-0 tabular-nums">{l.ms === null ? '—' : `${l.ms} ms`}</b><span className="text-xs text-muted">{l.note}</span></li>)}</ul>}
+      </div>}
+      {result && <div className="rounded-theme bg-raised p-3 text-sm" role="status" aria-live="polite">{result}</div>}
     </Section>
   );
 }
