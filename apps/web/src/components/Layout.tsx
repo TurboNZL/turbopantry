@@ -7,6 +7,7 @@ import { cn } from '../lib/cn.ts';
 import { useStore } from '../lib/store.ts';
 import { useListEntries } from '../lib/data.ts';
 import { useLiveConnection } from '../lib/live.ts';
+import { useListAlerts } from '../lib/listAlerts.ts';
 import { Toasts } from './Toasts.tsx';
 import { ContextMenuHost } from '../lib/contextMenu.tsx';
 
@@ -65,9 +66,10 @@ function CandyDefs() {
 export function Layout() {
   const nav = useNavigate();
   const { pathname } = useLocation();
+  useListAlerts();
   useLiveConnection(); // one live stream per device: pantry, list and recipes update on every phone at once
   const open = useListEntries().entries.filter((e) => !e.checked).length;
-  const badge = (to: string, big = false) => (to === '/shopping' && open > 0 ? <span className={cn('inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1 text-[11px] font-bold leading-5 text-accent-fg', big ? 'ml-1' : 'absolute right-1/4 top-0.5')} aria-label={`${open} on the list`}>{open}</span> : null);
+  const badge = (to: string, big = false) => (to === '/shopping' && open > 0 ? <span className={cn('inline-flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full !bg-accent px-1 text-[11px] font-bold leading-none tabular-nums !text-accent-fg', big ? 'ml-1' : 'absolute right-1/4 top-0.5 z-10')} aria-label={`${open} on the list`}>{open}</span> : null);
   const onRecipes = pathname.startsWith('/recipes') || pathname === '/';
   const sideRef = useIndicator<HTMLElement>(pathname);
   const tabRef = useIndicator<HTMLElement>(pathname);
@@ -76,8 +78,8 @@ export function Layout() {
   const layout = useStore((s) => s.settings.layout);
   const topbar = layout === 'topbar', dock = layout === 'dock';
   const noSide = topbar || dock; // these layouts have no side bar at all
-  // 26-28 px logos are small icons: per the engine's logos rule 3 they are the coloured emblem symbol alone (favicon.svg), not the full mark (icon.svg)
-  const logo = '/favicon.svg';
+  // the header shows the app's full emblem mark (owner's call, 2026-10-18), not the favicon symbol
+  const logo = '/icon.svg';
   return (
     <div className="flex h-full flex-col">
       {effectiveUi(ui) === 'lgux' && <CandyDefs />}

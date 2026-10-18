@@ -144,7 +144,7 @@ export function createApp({ db, webDir, imagesDir, fetchPicture = safeFetchPictu
       const result = pasted ? importFromText(pasted, link) : await importFromUrl(link!, { fetchPage, render, instagram });
       if (!('recipe' in result)) return json(res, 422, result);
       // link what is already in the pantry (exact words only) and say what else it could be, so the review can confirm each line
-      const linked = linkIngredients(db, result.recipe.ingredients);
+      const linked = linkIngredients(db, result.recipe.ingredients, false); // a draft is only a preview: it makes no items
       return json(res, 200, { ...result, recipe: { ...result.recipe, ingredients: linked }, suggestions: suggestionsFor(db, linked) });
     }
     return json(res, 404, { error: 'Not found' });

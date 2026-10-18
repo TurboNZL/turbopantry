@@ -13,6 +13,8 @@ export interface Block {
   /** Top-left corner on the floor, in grid cells, AFTER turning (the box always sits inside the floor). */
   x: number;
   y: number;
+  /** How many steps up its underside is: blocks rest on whatever is below them (`settle`), so stacking is just dropping one on another. */
+  z?: number;
   /** Size before turning: width, depth (cells) and height (steps). */
   w: number;
   d: number;
@@ -31,43 +33,22 @@ export interface Block {
 
 export interface Layout { blocks: Block[] }
 
-export const MAX_BLOCKS = 80;
-/** Cells along each side of the floor. */
-export const FLOOR: Record<LayoutKind, number> = { pantry: 16, store: 24 };
-export const MAX_SIDE = 24;
+export const MAX_BLOCKS = 120;
+/** Cells along each side of the floor (a shop is much bigger than a kitchen). */
+export const FLOOR: Record<LayoutKind, number> = { pantry: 24, store: 64 };
+export const MAX_SIDE = 64;
 export const MAX_HEIGHT = 12;
+/** How high a stack of blocks may go, in steps. */
+export const MAX_STACK = 24;
 export const MAX_LABEL = 30;
 
 export const BLOCK_COLORS = ['#c9d6e2', '#8fb8de', '#7fd1b9', '#e8c170', '#e39a8f', '#b9a0de', '#a4a4a4', '#6c7a89'];
 
-export interface Preset { kind: string; label: string; w: number; d: number; h: number; color: string; groups?: string[] }
+/** There is one kind of block. Give it a name and things can be kept in it (a kitchen) or shopping groups put in it (a shop). */
+export const NEW_BLOCK = { kind: 'block', label: '', w: 2, d: 2, h: 3, color: '#8fb8de' } as const;
 
-export const KITCHEN_PRESETS: Preset[] = [
-  { kind: 'fridge', label: 'Fridge', w: 2, d: 2, h: 6, color: '#c9d6e2' },
-  { kind: 'freezer', label: 'Freezer', w: 2, d: 2, h: 5, color: '#8fb8de' },
-  { kind: 'shelf', label: 'Pantry', w: 3, d: 1, h: 7, color: '#e8c170' },
-  { kind: 'cupboard', label: 'Cupboard', w: 3, d: 1, h: 4, color: '#b9a0de' },
-  { kind: 'bench', label: 'Bench', w: 5, d: 2, h: 3, color: '#a4a4a4' },
-  { kind: 'island', label: 'Island', w: 4, d: 2, h: 3, color: '#7fd1b9' },
-  { kind: 'table', label: 'Table', w: 4, d: 3, h: 2, color: '#e39a8f' },
-  { kind: 'wall', label: 'Wall', w: 6, d: 1, h: 8, color: '#6c7a89' },
-];
-
-export const STORE_PRESETS: Preset[] = [
-  { kind: 'aisle', label: 'Aisle', w: 2, d: 8, h: 4, color: '#8fb8de' },
-  { kind: 'produce', label: 'Fresh produce', w: 6, d: 3, h: 3, color: '#7fd1b9', groups: ['Fruit', 'Vegetables', 'Salad & greens', 'Herbs & aromatics'] },
-  { kind: 'chilled', label: 'Chilled wall', w: 8, d: 1, h: 5, color: '#c9d6e2', groups: ['Milk & cream', 'Cheese', 'Yoghurt', 'Butter & spreads', 'Eggs'] },
-  { kind: 'freezer', label: 'Freezers', w: 2, d: 6, h: 3, color: '#b9a0de', groups: ['Frozen veg & fruit', 'Frozen meals', 'Ice cream & desserts'] },
-  { kind: 'deli', label: 'Deli counter', w: 5, d: 2, h: 3, color: '#e39a8f', groups: ['Deli meats'] },
-  { kind: 'checkout', label: 'Checkout', w: 2, d: 3, h: 2, color: '#e8c170' },
-  { kind: 'entrance', label: 'Entrance', w: 4, d: 1, h: 1, color: '#a4a4a4' },
-  { kind: 'wall', label: 'Wall', w: 8, d: 1, h: 8, color: '#6c7a89' },
-];
-
-export const presetsFor = (kind: LayoutKind): Preset[] => (kind === 'pantry' ? KITCHEN_PRESETS : STORE_PRESETS);
-
-/** Walls and doorways hold nothing; everything else can hold items (kitchen) or groups (shop). */
-export const holdsThings = (kind: string): boolean => kind !== 'wall' && kind !== 'entrance';
+/** Every block can hold things (older plans had walls and doorways that could not; they can now). A kitchen block is a place once it has a name (`placeOf`). */
+export const holdsThings = (_kind: string): boolean => true;
 
 export const newId = (): string => Math.random().toString(36).slice(2, 10).padEnd(8, '0');
 
@@ -92,21 +73,38 @@ export function overlaps(a: Block, b: Block): boolean {
   return a.x < b.x + fb.w && b.x < a.x + fa.w && a.y < b.y + fb.d && b.y < a.y + fa.d;
 }
 
-/** Whether `b` fits inside the floor without sitting on any other block. */
+/**
+ * Lets every block rest on whatever is below it: its level is the top of the highest block it overlaps on the floor (0 when it overlaps none).
+ * Blocks are taken from the bottom up, so an existing stack keeps its order; `top` is a block that was just dropped, which always lands on top of what it overlaps.
+ */
+export function settle(blocks: Block[], top?: string): Block[] {
+  const order = blocks.map((b, i) => ({ b, i })).sort((p, q) => (p.b.id === top ? 1 : 0) - (q.b.id === top ? 1 : 0) || (p.b.z ?? 0) - (q.b.z ?? 0) || p.i - q.i);
+  const placed: Block[] = [];
+  const out = new Map<string, Block>();
+  for (const { b } of order) {
+    let z = 0;
+    for (const o of placed) if (overlaps(b, o)) z = Math.max(z, (o.z ?? 0) + o.h);
+    const nb = { ...b, z };
+    placed.push(nb); out.set(b.id, nb);
+  }
+  return blocks.map((b) => out.get(b.id)!);
+}
+
+/** Whether `b` fits inside the floor and the stack it would make is not too high. It may sit on other blocks. */
 export function canPlace(blocks: Block[], b: Block, size: number): boolean {
   const f = footprint(b);
   if (b.x < 0 || b.y < 0 || b.x + f.w > size || b.y + f.d > size) return false;
-  return !blocks.some((o) => o.id !== b.id && overlaps(o, b));
+  return settle([...blocks.filter((o) => o.id !== b.id), b], b.id).every((o) => (o.z ?? 0) + o.h <= MAX_STACK);
 }
 
-/** The free spot nearest to `near` (default the top-left corner, so a plain scan) where a box of this size fits, or null when the floor is full. */
+/** The free spot nearest to `near` (default the top-left corner) where a box of this size fits on the floor, or null when the floor is full. */
 export function freeSpot(blocks: Block[], w: number, d: number, size: number, rot: Block['rot'] = 0, near: { x: number; y: number } = { x: 0, y: 0 }): { x: number; y: number } | null {
   const probe: Block = { id: '', kind: '', x: 0, y: 0, w, d, h: 1, rot, label: '', color: '' };
   const f = footprint(probe);
   let best: { x: number; y: number } | null = null, bestDist = Infinity;
   for (let y = 0; y + f.d <= size; y++) for (let x = 0; x + f.w <= size; x++) {
     const dist = (x + f.w / 2 - near.x) ** 2 + (y + f.d / 2 - near.y) ** 2;
-    if (dist < bestDist && canPlace(blocks, { ...probe, x, y }, size)) { best = { x, y }; bestDist = dist; }
+    if (dist < bestDist && !blocks.some((o) => overlaps({ ...probe, x, y }, o))) { best = { x, y }; bestDist = dist; }
   }
   return best;
 }
@@ -120,13 +118,12 @@ export function uniqueLabel(blocks: Block[], label: string, exceptId?: string): 
   return label;
 }
 
-/** A new block from a preset, in the free spot nearest `near` (default the corner), or null when there is no room. */
-export function blockFromPreset(blocks: Block[], p: Preset, size: number, near?: { x: number; y: number }): Block | null {
-  const spot = freeSpot(blocks, p.w, p.d, size, 0, near);
+/** A new block with the given name, in the free floor spot nearest `near`, or null when there is no room. */
+export function newBlock(blocks: Block[], label: string, size: number, near?: { x: number; y: number }): Block | null {
+  const spot = freeSpot(blocks, NEW_BLOCK.w, NEW_BLOCK.d, size, 0, near);
   if (!spot) return null;
-  const b: Block = { id: newId(), kind: p.kind, ...spot, w: p.w, d: p.d, h: p.h, rot: 0, label: uniqueLabel(blocks, p.label), color: p.color };
-  if (p.groups) b.groups = [...p.groups];
-  return b;
+  const name = label.trim().slice(0, MAX_LABEL);
+  return settle([...blocks, { id: newId(), kind: NEW_BLOCK.kind, ...spot, w: NEW_BLOCK.w, d: NEW_BLOCK.d, h: NEW_BLOCK.h, rot: 0, label: name ? uniqueLabel(blocks, name) : '', color: NEW_BLOCK.color }]).at(-1)!;
 }
 
 /** A copy next to the original (or in any free spot). */
@@ -134,22 +131,19 @@ export function duplicateBlock(blocks: Block[], src: Block, size: number): Block
   const spot = freeSpot(blocks, footprint(src).w, footprint(src).d, size, src.rot);
   if (!spot) return null;
   const { walk: _walk, ...rest } = src;
-  const copy: Block = { ...rest, id: newId(), ...spot, label: uniqueLabel(blocks, src.label) };
+  const copy: Block = { ...rest, id: newId(), ...spot, z: 0, label: src.label ? uniqueLabel(blocks, src.label) : '' };
   if (src.groups) copy.groups = [...src.groups];
   return copy;
 }
 
-/** The kitchen offered to someone with an empty plan: the places the pantry already knows. */
+/** The kitchen offered to someone with an empty plan: a fridge, a freezer and a few shelves, all named so they are places. */
 export function starterKitchen(): Layout {
-  const at = (kind: string, x: number, y: number, rot: Block['rot'] = 0): Block => {
-    const p = KITCHEN_PRESETS.find((q) => q.kind === kind)!;
-    return { id: newId(), kind, x, y, w: p.w, d: p.d, h: p.h, rot, label: p.label, color: p.color };
-  };
-  return { blocks: [at('wall', 5, 0), at('fridge', 0, 0), at('freezer', 11, 0), at('shelf', 0, 5, 90), at('cupboard', 4, 1), at('bench', 4, 3), at('island', 5, 8)] };
+  const at = (label: string, x: number, y: number, w: number, d: number, h: number, color: string, rot: Block['rot'] = 0): Block => ({ id: newId(), kind: NEW_BLOCK.kind, x, y, w, d, h, rot, label, color });
+  return { blocks: settle([at('Fridge', 0, 0, 2, 2, 6, '#c9d6e2'), at('Freezer', 11, 0, 2, 2, 5, '#8fb8de'), at('Pantry', 0, 5, 3, 1, 7, '#e8c170', 90), at('Cupboard', 4, 1, 3, 1, 4, '#b9a0de'), at('Bench', 4, 3, 5, 2, 3, '#a4a4a4'), at('Island', 5, 8, 4, 2, 3, '#7fd1b9')]) };
 }
 
-/** The place name of a block: its explicit place, else its label. Null for walls and doorways. */
-export const placeOf = (b: Block): string | null => (holdsThings(b.kind) ? (b.place?.trim() || b.label.trim() || null) : null);
+/** The place name of a block: its explicit place, else its label. Null while the block has no name (a block you name is a place things can be kept in). */
+export const placeOf = (b: Block): string | null => b.place?.trim() || b.label.trim() || null;
 
 /**
  * The shopping groups in the order the shop is walked: the groups of block 1, then block 2, ... then every group nothing claimed, in `rest`'s
@@ -184,10 +178,11 @@ export function sanitizeLayout(raw: unknown, kind: LayoutKind): Layout | string 
       id, kind: k, x: num(r.x), y: num(r.y), w: num(r.w), d: num(r.d), h: num(r.h), rot: (typeof r.rot === 'number' ? ((((Math.round(r.rot / 90) % 4) + 4) % 4) * 90) : 0) as Block['rot'],
       label: typeof r.label === 'string' ? r.label.trim().slice(0, MAX_LABEL) : '', color: typeof r.color === 'string' && HEX.test(r.color) ? r.color : BLOCK_COLORS[0]!,
     }, size);
+    if (typeof r.z === 'number' && Number.isFinite(r.z)) b = { ...b, z: clampInt(r.z, 0, MAX_STACK) };
     if (typeof r.place === 'string' && r.place.trim()) b = { ...b, place: r.place.trim().slice(0, MAX_LABEL) };
     if (Array.isArray(r.groups)) b = { ...b, groups: [...new Set(r.groups.filter((g): g is string => typeof g === 'string' && GROUPS.includes(g)))] };
     if (typeof r.walk === 'number' && Number.isFinite(r.walk)) b = { ...b, walk: clampInt(r.walk, 1, MAX_BLOCKS) };
     blocks.push(b);
   }
-  return { blocks };
+  return { blocks: settle(blocks) };
 }

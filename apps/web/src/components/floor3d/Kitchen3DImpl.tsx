@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { MapPinOff, Pencil, PackageX, Plus, Search, ShoppingCart, Sofa } from 'lucide-react';
-import { holdsThings, placeOf, searchItems, starterKitchen, titleCase, FLOOR, type Block, type Item } from '@turbopantry/shared';
+import { placeOf, searchItems, starterKitchen, titleCase, FLOOR, type Block, type Item } from '@turbopantry/shared';
 import { useLayout } from '../../lib/useLayout.ts';
 import { useApi } from '../../lib/useApi.ts';
 import { toast } from '../../lib/toast.ts';
@@ -41,14 +41,14 @@ export function Kitchen3DImpl({ items, onChange, onOut, onList }: Kitchen3DProps
   const info = useMemo(() => {
     const m = new Map<string, BlockInfo>();
     for (const b of layout.blocks) {
-      if (!holdsThings(b.kind)) continue;
+      if (!placeOf(b)) continue;
       const list = byBlock.get(b.id) ?? [], low = list.filter((i) => isOut(i) || isLow(i)).length;
       m.set(b.id, low ? { badge: low, tone: 'warn', hot: true } : list.length ? { badge: list.length, tone: 'ok' } : {});
     }
     return m;
   }, [layout.blocks, byBlock]);
 
-  const places = useMemo(() => layout.blocks.filter((b) => holdsThings(b.kind)).map((b) => ({ id: b.id, name: placeOf(b)! })), [layout.blocks]);
+  const places = useMemo(() => layout.blocks.filter((b) => placeOf(b)).map((b) => ({ id: b.id, name: placeOf(b)! })), [layout.blocks]);
   const open = layout.blocks.find((b) => b.id === openId) ?? null;
 
   async function setPlace(item: Item, place: string | null) {
@@ -77,7 +77,7 @@ export function Kitchen3DImpl({ items, onChange, onOut, onList }: Kitchen3DProps
         <span className="flex-1" />
         {other.length > 0 && <button className="chip inline-flex min-h-[2.75rem] items-center gap-1.5 px-3" onClick={() => setElsewhere(true)}>Elsewhere<span className="font-semibold">{other.length}</span></button>}
       </div>
-      <Scene3D cam={cam} size={FLOOR.pantry} blocks={layout.blocks} selectedId={openId} info={info} label="Kitchen" onTap={(id) => { const b = layout.blocks.find((x) => x.id === id); setOpenId(b && holdsThings(b.kind) ? b.id : null); }} />
+      <Scene3D cam={cam} size={FLOOR.pantry} blocks={layout.blocks} selectedId={openId} info={info} label="Kitchen" onTap={(id) => { const b = layout.blocks.find((x) => x.id === id); setOpenId(b && placeOf(b) ? b.id : null); }} />
       <CameraPad cam={cam} />
       <p className="text-center text-xs text-muted">Tap a place to see what is in it. Orange numbers are things that are low or out.</p>
 

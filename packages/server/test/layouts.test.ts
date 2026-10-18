@@ -35,12 +35,12 @@ describe('floor plans', () => {
 
   it('cleans what it stores', async () => {
     const r = await call('PUT', '/api/layouts/pantry', { blocks: [block({ x: -9, w: 999, label: '  Fridge  ', color: 'nope', secret: 'x', groups: ['Milk & cream', 'zzz'] })] });
-    expect(r.body.blocks[0]).toEqual({ id: 'b1', kind: 'fridge', x: 0, y: 2, w: 16, d: 2, h: 5, rot: 0, label: 'Fridge', color: '#c9d6e2', groups: ['Milk & cream'] });
+    expect(r.body.blocks[0]).toEqual({ id: 'b1', kind: 'fridge', x: 0, y: 2, w: 24, d: 2, h: 5, z: 0, rot: 0, label: 'Fridge', color: '#c9d6e2', groups: ['Milk & cream'] });
   });
 
   it('rejects bad plans', async () => {
     expect((await call('PUT', '/api/layouts/pantry', { nope: 1 })).status).toBe(400);
-    expect((await call('PUT', '/api/layouts/pantry', { blocks: Array.from({ length: 81 }, (_, i) => block({ id: `i${i}` })) })).status).toBe(400);
+    expect((await call('PUT', '/api/layouts/pantry', { blocks: Array.from({ length: 121 }, (_, i) => block({ id: `i${i}` })) })).status).toBe(400);
     expect((await call('PUT', '/api/layouts/pantry', { blocks: [block(), block()] })).status).toBe(400);
     expect((await call('DELETE', '/api/layouts/pantry')).status).toBe(405);
   });

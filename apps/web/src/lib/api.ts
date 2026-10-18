@@ -1,4 +1,4 @@
-import type { RecipeGroup, Health, ImportDraft, ImportError, Item, ListEntry, Store, Recipe, RecipeInput, RecipeSummary, ServerUpdate, Status } from '@turbopantry/shared';
+import type { DuplicateReason, RecipeGroup, Health, ImportDraft, ImportError, Item, ListEntry, Store, Recipe, RecipeInput, RecipeSummary, ServerUpdate, Status } from '@turbopantry/shared';
 
 export interface ApiConfig { serverUrl: string; token: string; cfAccessId?: string; cfAccessSecret?: string }
 
@@ -45,6 +45,9 @@ export class Api {
   listItems() { return this.call<Item[]>('GET', '/api/items'); }
   createItem(body: Partial<Item> & { fromRecipe?: boolean }) { return this.call<Item & { existed: boolean }>('POST', '/api/items', body); }
   updateItem(id: number, body: Partial<Item> & { addAlias?: string }) { return this.call<Item>('PUT', `/api/items/${id}`, body); }
+  duplicateItems() { return this.call<{ a: Item; b: Item; reason: DuplicateReason }[]>('GET', '/api/items/duplicates'); }
+  dismissDuplicate(a: number, b: number) { return this.call<{ ok: true }>('POST', '/api/items/duplicates/dismiss', { a, b }); }
+  mergeItems(from: number, into: number) { return this.call<Item>('POST', `/api/items/${from}/merge`, { into }); }
   deleteItem(id: number) { return this.call<{ ok: true }>('DELETE', `/api/items/${id}`); }
   adjustStock(changes: { itemId: number; delta: number }[], reason = 'manual', recipeId?: number) { return this.call<{ items: Item[]; applied: { itemId: number; delta: number }[] }>('POST', '/api/stock/adjust', { changes, reason, recipeId }); }
   listEntries() { return this.call<ListEntry[]>('GET', '/api/list'); }

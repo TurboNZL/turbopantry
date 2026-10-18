@@ -26,19 +26,17 @@ function Row({ it, undoing, onOpen, onChange, onOut, onUndo, onExpire, onList, o
     { label: 'More settings', icon: <SlidersHorizontal size={16} />, run: onMore },
     { label: 'Delete', icon: <Trash2 size={16} />, danger: true, run: onDelete },
   ]);
+  const out = it.qty === 0 && !undoing;
   return (
-    <div {...menu} id={`item-${it.id}`} className={`flex min-h-[3.5rem] items-center gap-0.5 pl-3 pr-1 ${highlight ? 'bt-flash' : ''}`}>
-      <div className="flex min-w-0 flex-1 items-center">
-        <button className="min-w-0 py-2 text-left" onClick={onOpen} aria-label={`${titleCase(it.name)} settings`}>
-          <span className={it.qty === 0 && !undoing ? 'line-clamp-2 break-words text-muted' : 'line-clamp-2 break-words font-medium'}>{titleCase(it.name)}</span>
-          {(low || it.place || it.recipeOnly) && <span className="block truncate text-xs text-muted">{[it.recipeOnly && 'only in a recipe', low && !it.recipeOnly && 'running low', it.place].filter(Boolean).join(' · ')}</span>}
-        </button>
-        <button className="btn btn-ghost flex h-10 w-10 shrink-0 items-center justify-center !p-0" aria-label={`Add ${titleCase(it.name)} to the list`} title="Add to the shopping list" onClick={onList}><ShoppingCart size={18} /></button>
-      </div>
+    <div {...menu} id={`item-${it.id}`} className={`flex h-11 items-center gap-0.5 pl-3 pr-1 ${highlight ? 'bt-flash' : ''}`}>
+      <button className="min-w-0 flex-1 truncate py-2 text-left text-[15px]" onClick={onOpen} aria-label={`${titleCase(it.name)} settings`}>
+        <span className={out ? 'text-muted' : 'font-medium'}>{titleCase(it.name)}</span>
+        {(low || it.place) && <span className="ml-1.5 text-xs text-muted">{[low && !out && 'running low', it.place].filter(Boolean).join(' · ')}</span>}
+      </button>
       <Stepper compact label={titleCase(it.name)} value={it.qty} step={it.step} unit={it.unit} onChange={onChange} />
-      {undoing
-        ? <UndoButton compact onUndo={onUndo} onExpire={onExpire} label="Undo" />
-        : <button className="btn btn-ghost flex h-10 w-10 shrink-0 items-center justify-center !p-0 disabled:opacity-30" aria-label={`Mark ${titleCase(it.name)} as out`} title="Mark as out" disabled={it.qty === 0} onClick={onOut}><PackageX size={18} /></button>}
+      {undoing && <UndoButton compact onUndo={onUndo} onExpire={onExpire} label="Undo" />}
+      <button className="btn btn-ghost flex h-8 w-8 shrink-0 items-center justify-center !p-0" aria-label={`Add ${titleCase(it.name)} to the list`} title="Add to the shopping list" onClick={onList}><ShoppingCart size={17} /></button>
+      {!out && !undoing && <button className="btn btn-ghost flex h-8 w-8 shrink-0 items-center justify-center !p-0" aria-label={`Mark ${titleCase(it.name)} as out`} title="Mark as out" onClick={onOut}><PackageX size={17} /></button>}
     </div>
   );
 }
@@ -58,18 +56,18 @@ export function PantryPage() {
   const kitchen = view3d && mode === 'kitchen';
   const [params] = useSearchParams();
   const focus = Number(params.get('item')) || null;
-  const [show, setShow] = useState<{ have: boolean; out: boolean; recipe: boolean }>(() => { try { return { have: true, out: true, recipe: false, ...(JSON.parse(localStorage.getItem('turbopantry.pantryFilter') ?? '{}') as object) }; } catch { return { have: true, out: true, recipe: false }; } });
-  const setFilter = (k: 'have' | 'out' | 'recipe', v: boolean) => setShow((s) => { const n = { ...s, [k]: v }; try { localStorage.setItem('turbopantry.pantryFilter', JSON.stringify(n)); } catch { /* not saved */ } return n; });
+  const [show, setShow] = useState<{ have: boolean; out: boolean }>(() => { try { const f = JSON.parse(localStorage.getItem('turbopantry.pantryFilter') ?? '{}') as { have?: boolean; out?: boolean }; return { have: f.have ?? true, out: f.out ?? true }; } catch { return { have: true, out: true }; } });
+  const setFilter = (k: 'have' | 'out', v: boolean) => setShow((s) => { const n = { ...s, [k]: v }; try { localStorage.setItem('turbopantry.pantryFilter', JSON.stringify(n)); } catch { /* not saved */ } return n; });
   // coming from the shopping list ("view in the pantry"): open that item
   useEffect(() => { if (focus) { const it = items.find((i) => i.id === focus); if (it) { setOpen(it); document.getElementById(`item-${focus}`)?.scrollIntoView({ block: 'center' }); } } }, [focus, items.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tracked = items;
   const text = q.trim();
-  const stateOf = (i: Item): 'have' | 'out' | 'recipe' => (i.qty > 0 ? 'have' : i.recipeOnly ? 'recipe' : 'out');
-  const counts = useMemo(() => ({ have: items.filter((i) => stateOf(i) === 'have').length, out: items.filter((i) => stateOf(i) === 'out').length, recipe: items.filter((i) => stateOf(i) === 'recipe').length }), [items]); // eslint-disable-line react-hooks/exhaustive-deps
+  const stateOf = (i: Item): 'have' | 'out' => (i.qty > 0 ? 'have' : 'out');
+  const counts = useMemo(() => ({ have: items.filter((i) => stateOf(i) === 'have').length, out: items.filter((i) => stateOf(i) === 'out').length }), [items]); // eslint-disable-line react-hooks/exhaustive-deps
   const visible = tracked.filter((i) => show[stateOf(i)] || i.id in outed); // an item just marked out stays put while its Undo is on offer
   const shown = text ? searchItems(tracked, text, 200) : visible; // searching looks at everything
-  const low = tracked.filter((i) => !i.recipeOnly).filter((i) => i.minQty > 0 && i.qty <= i.minQty);
+  const low = tracked.filter((i) => i.minQty > 0 && i.qty <= i.minQty);
   const parsed = parseQuickAdd(text);
   const exact = text ? items.find((i) => i.name.toLowerCase() === parsed.words.toLowerCase()) : null;
   const untracked: Item[] = [];
@@ -112,9 +110,9 @@ export function PantryPage() {
   }
 
   return (
-    <div className="space-y-4 pb-4">
+    <div className="space-y-2 pb-4">
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold">Pantry</h1>
+        <h1 className="text-xl font-bold md:text-2xl">Pantry</h1>
         {view3d && (
           <div role="radiogroup" aria-label="Pantry view" className="grid grid-flow-col gap-1 rounded-theme border border-line bg-raised p-1">
             <button role="radio" aria-checked={!kitchen} className={`flex min-h-[2.5rem] items-center gap-1.5 rounded-theme px-3 text-sm font-medium ${!kitchen ? 'bg-accent text-accent-fg' : 'text-muted'}`} onClick={() => pick('list')}><ListIcon size={16} />List</button>
@@ -123,16 +121,16 @@ export function PantryPage() {
         )}
       </div>
       {kitchen && <Kitchen3D items={items} onChange={(it, qty) => void change(it, qty)} onOut={(it) => void out(it)} onList={(it) => void toList.add(it)} />}
-      {!kitchen && <form className="sticky top-14 z-10 -mx-1 flex gap-2 bg-bg/90 px-1 py-2 backdrop-blur md:top-16" onSubmit={(e) => { e.preventDefault(); if (!exact) void add(); }}>
-        <input className="input find-box h-12 flex-1 text-base" placeholder="Find or add: milk, 2kg flour…" aria-label="Find or add an item" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="done" autoCapitalize="none" />
-        {text && !exact && <button className="btn btn-accent h-12 px-4" aria-label={`Add ${text}`}><Plus size={20} /></button>}
+      {!kitchen && <form className="find-bar sticky top-14 z-10 -mx-1 flex gap-2 px-1 py-1.5 backdrop-blur md:top-16" onSubmit={(e) => { e.preventDefault(); if (!exact) void add(); }}>
+        <input className="input find-box h-11 flex-1 text-base" placeholder="Find or add: milk, 2kg flour…" aria-label="Find or add an item" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="done" autoCapitalize="none" />
+        {text && !exact && <button className="btn btn-accent h-11 px-4" aria-label={`Add ${text}`}><Plus size={20} /></button>}
       </form>}
 
       {!kitchen && !text && (
         <fieldset className="flex flex-wrap items-center gap-x-2 gap-y-1" aria-label="Show">
           <legend className="sr-only">Show</legend>
-          {([['have', 'Have', counts.have], ['out', 'Out of', counts.out], ['recipe', 'Only in recipes', counts.recipe]] as const).map(([k, label, n]) => (
-            <label key={k} className={`chip inline-flex min-h-[2.5rem] cursor-pointer items-center gap-2 px-3 ${show[k] ? 'ring-2 ring-accent' : 'opacity-70'}`}>
+          {([['have', 'Have', counts.have], ['out', 'Out of', counts.out]] as const).map(([k, label, n]) => (
+            <label key={k} className={`chip inline-flex min-h-[2.25rem] cursor-pointer items-center gap-2 px-3 ${show[k] ? 'ring-2 ring-accent' : 'opacity-70'}`}>
               <input type="checkbox" className="h-4 w-4" checked={show[k]} onChange={(e) => setFilter(k, e.target.checked)} />{label}<span className="text-xs opacity-70">{n}</span></label>
           ))}
         </fieldset>
@@ -146,9 +144,9 @@ export function PantryPage() {
       ))}
 
       {!text && low.length > 0 && (
-        <section className="card space-y-2 p-3" aria-label="Running low">
-          <h2 className="flex items-center gap-2 text-sm font-semibold"><AlertTriangle size={16} className="text-warn" />Running low</h2>
-          <div className="flex flex-wrap gap-2">{low.map((it) => <button key={it.id} className="chip inline-flex min-h-[2.5rem] items-center gap-2 px-3" onClick={() => void toList.add(it)}>{titleCase(it.name)}<ShoppingCart size={14} /></button>)}</div>
+        <section className="card flex flex-wrap items-center gap-1.5 px-3 py-2" aria-label="Running low">
+          <h2 className="mr-1 flex items-center gap-1.5 text-sm font-semibold"><AlertTriangle size={15} className="text-warn" />Running low</h2>
+          <div className="flex flex-wrap gap-1.5">{low.map((it) => <button key={it.id} className="chip inline-flex min-h-[2rem] items-center gap-1.5 px-2.5 text-sm" onClick={() => void toList.add(it)}>{titleCase(it.name)}<ShoppingCart size={14} /></button>)}</div>
         </section>
       )}
 
@@ -158,8 +156,8 @@ export function PantryPage() {
       )}
 
       {groups.map(({ c, rows }) => (
-        <section key={c} aria-label={c} className="space-y-1">
-          <h2 className="px-1 text-xs font-semibold uppercase tracking-wider text-muted">{c}</h2>
+        <section key={c} aria-label={c} className="space-y-0.5">
+          <h2 className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted">{c}</h2>
           <div className="card divide-y divide-line overflow-hidden">
             {rows.map((it) => (
               <Row key={it.id} it={it} undoing={it.id in outed} onOpen={() => setOpen(it)} onChange={(v) => void change(it, v)} onOut={() => void out(it)} onUndo={() => void undoOut(it)} onExpire={() => expire(it.id)}

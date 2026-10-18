@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Copy, Footprints, Plus, Redo2, RotateCw, Trash2, Undo2 } from 'lucide-react';
-import { BLOCK_COLORS, GROUP_SECTIONS, MAX_BLOCKS, MAX_HEIGHT, MAX_LABEL, MAX_SIDE, blockFromPreset, canPlace, clampBlock, duplicateBlock, footprint, holdsThings, presetsFor, uniqueLabel, type Block, type Layout, type LayoutKind, FLOOR } from '@turbopantry/shared';
+import { BLOCK_COLORS, GROUP_SECTIONS, MAX_BLOCKS, MAX_HEIGHT, MAX_LABEL, MAX_SIDE, canPlace, clampBlock, duplicateBlock, footprint, newBlock, settle, uniqueLabel, type Block, type Layout, type LayoutKind, FLOOR } from '@turbopantry/shared';
 import { cn } from '../../lib/cn.ts';
 import { toast } from '../../lib/toast.ts';
 import { Sheet } from '../Sheet.tsx';
@@ -52,6 +52,7 @@ export function LayoutEditor({ kind, layout, onSave, onDone, cam }: { kind: Layo
   const [tab, setTab] = useState<'add' | 'edit'>('add');
   const [walkMode, setWalkMode] = useState(false);
   const [groupsFor, setGroupsFor] = useState(false);
+  const [newName, setNewName] = useState('');
   const blocksRef = useRef(blocks); blocksRef.current = blocks;
   const dragBase = useRef<Block[] | null>(null);
   const lastKey = useRef<{ key: string; at: number } | null>(null);
@@ -83,23 +84,23 @@ export function LayoutEditor({ kind, layout, onSave, onDone, cam }: { kind: Layo
     const cur = blocksRef.current.find((b) => b.id === id); if (!cur) return;
     const next = clampBlock({ ...cur, ...patch }, size);
     if (!canPlace(blocksRef.current, next, size)) { if (!quiet) toast('Something is in the way there.'); return; }
-    commit(blocksRef.current.map((b) => (b.id === id ? next : b)), key);
+    commit(settle(blocksRef.current.map((b) => (b.id === id ? next : b)), id), key);
   };
   const nudge = (sx: number, sy: number) => { if (!sel) return; const s = screenStep(cam.ref.current, sx, sy); change(sel.id, { x: sel.x + s.x, y: sel.y + s.y }, undefined, true); };
-  const remove = () => { if (!sel) return; commit(renumber(blocks.filter((b) => b.id !== sel.id))); setSelectedId(null); setTab('add'); };
-  const add = (i: number) => {
+  const remove = () => { if (!sel) return; commit(settle(renumber(blocks.filter((b) => b.id !== sel.id)))); setSelectedId(null); setTab('add'); };
+  const add = () => {
     if (blocks.length >= MAX_BLOCKS) { toast(`That is the most blocks a plan can have (${MAX_BLOCKS}).`); return; }
-    const b = blockFromPreset(blocks, presetsFor(kind)[i]!, size, { x: size / 2, y: size / 2 });
+    const b = newBlock(blocks, newName, size, { x: size / 2, y: size / 2 });
     if (!b) { toast('There is no free space left on the floor. Make something smaller or delete a block.'); return; }
-    commit([...blocks, b]); setSelectedId(b.id); setTab('edit');
+    commit(settle([...blocks, b], b.id)); setSelectedId(b.id); setTab('edit'); setNewName('');
   };
-  const dup = () => { if (!sel) return; const c = duplicateBlock(blocks, sel, size); if (!c) { toast('There is no free space left on the floor.'); return; } commit([...blocks, c]); setSelectedId(c.id); };
+  const dup = () => { if (!sel) return; const c = duplicateBlock(blocks, sel, size); if (!c) { toast('There is no free space left on the floor.'); return; } commit(settle([...blocks, c], c.id)); setSelectedId(c.id); };
   const rotate = () => { if (!sel) return; const rot = ((sel.rot + 90) % 360) as Block['rot']; const f = footprint({ ...sel, rot }); change(sel.id, { rot, x: Math.min(sel.x, size - f.w), y: Math.min(sel.y, size - f.d) }); };
 
   const tap = (id: string | null) => {
     if (walkMode) {
       if (!id) return;
-      const b = blocksRef.current.find((x) => x.id === id); if (!b || !holdsThings(b.kind)) return;
+      const b = blocksRef.current.find((x) => x.id === id); if (!b) return;
       const cur = blocksRef.current;
       commit(b.walk !== undefined
         ? renumber(cur.map((x) => { if (x.id !== id) return x; const { walk: _w, ...r } = x; return r; }))
@@ -128,7 +129,6 @@ export function LayoutEditor({ kind, layout, onSave, onDone, cam }: { kind: Layo
     return m;
   }, [blocks]);
 
-  const presets = presetsFor(kind);
   return (
     <div className="space-y-3 lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-5 lg:space-y-0">
       <div className="z-20 -mx-1 space-y-2 bg-bg px-1 pb-2 pt-1 top-14 md:top-16 [@media(min-height:700px)]:sticky">
@@ -148,7 +148,7 @@ export function LayoutEditor({ kind, layout, onSave, onDone, cam }: { kind: Layo
         <Scene3D cam={cam} size={size} blocks={blocks} selectedId={selectedId} editable={!walkMode} info={info} compact
           label={kind === 'pantry' ? 'Kitchen layout builder' : 'Shop layout builder'}
           onTap={tap} onDragStart={(id) => { dragBase.current = blocksRef.current; setSelectedId(id); }}
-          onMove={(id, x, y) => apply(blocksRef.current.map((b) => (b.id === id ? { ...b, x, y } : b)))}
+          onMove={(id, x, y) => apply(settle(blocksRef.current.map((b) => (b.id === id ? { ...b, x, y } : b)), id))}
           onDragEnd={() => { const base = dragBase.current; dragBase.current = null; if (base && base !== blocksRef.current) { setPast((p) => [...p.slice(-(HISTORY - 1)), base]); setFuture([]); lastKey.current = null; } }}
           onKey={onKey} />
         <CameraPad cam={cam} />
@@ -164,14 +164,11 @@ export function LayoutEditor({ kind, layout, onSave, onDone, cam }: { kind: Layo
 
       {tab === 'add' && (
         <div className="card space-y-2 p-3">
-          <p className="text-sm text-muted">Tap one to put it on the floor, then drag it where it goes. {blocks.length}/{MAX_BLOCKS} blocks.</p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {presets.map((p, i) => (
-              <button key={p.kind} className="btn flex h-12 items-center justify-center gap-2 px-2 text-sm" onClick={() => add(i)}>
-                <span className="h-3 w-3 shrink-0 rounded-sm border border-black/30" style={{ background: p.color }} aria-hidden /><Plus size={14} className="shrink-0" /><span className="truncate">{p.label}</span>
-              </button>
-            ))}
-          </div>
+          <p className="text-sm text-muted">There is one kind of block. Name it ({kind === 'pantry' ? 'a named block is a place things can be kept in' : 'then choose the shopping groups it holds'}), put it on the floor, and drag it where it goes. Drop one on another to stack them. {blocks.length}/{MAX_BLOCKS} blocks.</p>
+          <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); add(); }}>
+            <input className="input h-12 min-w-0 flex-1 text-base" value={newName} maxLength={MAX_LABEL} placeholder={kind === 'pantry' ? 'Name, e.g. Fridge' : 'Name, e.g. Aisle 3'} aria-label="Name of the new block" onChange={(e) => setNewName(e.target.value)} />
+            <button className="btn btn-accent flex h-12 shrink-0 items-center gap-1.5 px-4 text-base"><Plus size={18} />Add block</button>
+          </form>
         </div>
       )}
 
@@ -182,7 +179,7 @@ export function LayoutEditor({ kind, layout, onSave, onDone, cam }: { kind: Layo
               onChange={(e) => change(sel.id, { label: e.target.value }, `label:${sel.id}`)}
               onBlur={() => { const l = sel.label.trim(); const u = l ? uniqueLabel(blocks, l, sel.id) : sel.label; if (u !== sel.label) change(sel.id, { label: u }); }} />
           </label>
-          {kind === 'pantry' && holdsThings(sel.kind) && <p className="-mt-1 text-xs text-muted">Items kept here use this name as their place.</p>}
+          {kind === 'pantry' && <p className="-mt-1 text-xs text-muted">{sel.label.trim() ? 'Items kept here use this name as their place.' : 'Give it a name and you can keep things in it.'}</p>}
           <div className="flex flex-wrap gap-2">
             <button className="btn flex h-11 items-center gap-1.5 px-3" onClick={rotate}><RotateCw size={18} />Turn 90°</button>
             <button className="btn flex h-11 items-center gap-1.5 px-3" onClick={dup}><Copy size={18} />Duplicate</button>
@@ -210,7 +207,7 @@ export function LayoutEditor({ kind, layout, onSave, onDone, cam }: { kind: Layo
                 className={cn('flex h-11 w-11 items-center justify-center rounded-theme border-2', sel.color === c ? 'border-accent' : 'border-line')}><span className="block h-7 w-7 rounded-md border border-black/20" style={{ background: c }} /></button>
             ))}
           </div>
-          {kind === 'store' && holdsThings(sel.kind) && (
+          {kind === 'store' && (
             <div className="space-y-2">
               <div className="text-sm font-medium">Shopping groups here</div>
               <div className="flex flex-wrap gap-1.5">{(sel.groups ?? []).length ? sel.groups!.map((g) => <span key={g} className="chip px-2 py-1 text-xs">{g}</span>) : <span className="text-sm text-muted">None yet.</span>}</div>

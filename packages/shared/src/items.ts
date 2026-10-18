@@ -22,8 +22,6 @@ export interface Item {
   mode: CountMode;
   /** In the pantry (every item is; kept for older data). */
   tracked: boolean;
-  /** Only a recipe knows it: made by linking, never stocked, none now. Hidden in the pantry unless asked for. */
-  recipeOnly: boolean;
   /** Overrides the built-in weight of a cup for this item. */
   gramsPerCup: number | null;
   place: string | null;
@@ -150,6 +148,44 @@ export function matchItems(name: string, items: Item[]): ItemMatch {
   }
   candidates.sort((a, b) => b.score - a.score || a.item.name.localeCompare(b.item.name));
   return { exact, candidates: candidates.slice(0, 4).map(({ item, kind }) => ({ item, kind })) };
+}
+
+// ---------------------------------------------------------------- duplicates
+
+export type DuplicateReason = 'less-specific' | 'spelling';
+export interface DuplicatePair { a: Item; b: Item; reason: DuplicateReason }
+/** A stable id for a pair of items, in either order (used to remember "these are different"). */
+export const pairKey = (x: number, y: number): string => (x < y ? `${x}:${y}` : `${y}:${x}`);
+
+const near = (x: string, y: string): boolean => {
+  if (x === y) return true;
+  if (x.length < 5 || y.length < 5 || Math.abs(x.length - y.length) > 1) return false;
+  // one edit apart (a letter more, less or different): "tomatoe"/"tomato", "yoghurt"/"yogurt"
+  let i = 0;
+  while (i < x.length && i < y.length && x[i] === y[i]) i++;
+  const rest = (s: string) => s.slice(i);
+  return rest(x).slice(1) === rest(y).slice(1) || rest(x).slice(1) === rest(y) || rest(x) === rest(y).slice(1);
+};
+
+/**
+ * Items that might be the same thing, for the owner to look at (never merged by itself):
+ *   less-specific  the words of one are all in the other ("Parmesan" / "Parmesan Cheese")
+ *   spelling       the same words but one is spelled a letter differently ("Yoghurt" / "Yogurt")
+ * `dismissed` is a set of `pairKey`s the household already said are different things.
+ */
+export function findDuplicates(items: Item[], dismissed: Set<string> = new Set()): DuplicatePair[] {
+  const toks = items.map((i) => [...new Set([...nameTokens(i.name)])]);
+  const out: DuplicatePair[] = [];
+  for (let x = 0; x < items.length; x++) for (let y = x + 1; y < items.length; y++) {
+    const A = items[x]!, B = items[y]!, ta = toks[x]!, tb = toks[y]!;
+    if (!ta.length || !tb.length || dismissed.has(pairKey(A.id, B.id))) continue;
+    const sub = (p: string[], q: string[]) => p.every((t) => q.includes(t));
+    if (ta.length !== tb.length || ta.some((t) => !tb.includes(t))) {
+      if (sub(ta, tb) || sub(tb, ta)) { out.push({ a: A, b: B, reason: 'less-specific' }); continue; }
+    }
+    if (ta.length === tb.length && ta.every((t) => tb.some((u) => near(t, u))) && tb.every((u) => ta.some((t) => near(t, u)))) out.push({ a: A, b: B, reason: 'spelling' });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- categories

@@ -17,6 +17,7 @@ export interface NativeUpdates {
 /** What the Android app puts on `window` (a Java interface: strings only, so results come back as JSON and updates as events). */
 interface AndroidBridge {
   setServer(url: string, token: string): void; setAccess(id: string, secret: string): void;
+  notificationsAllowed?(): boolean; requestNotifications?(): void; notify?(title: string, text: string): void;
   version(): string; updateState(): string; checkForUpdate(): void; installUpdate(): void; hasUpdateToken(): boolean; setUpdateToken(t: string): void;
 }
 const android = (): AndroidBridge | undefined => (typeof window === 'undefined' ? undefined : (window as unknown as { TurboPantryAndroid?: AndroidBridge }).TurboPantryAndroid);
@@ -42,6 +43,14 @@ export function nativeUpdates(): NativeUpdates | null {
     },
   };
 }
+
+/** Notifications from the Android app (an older shell has none: `supported` is false). */
+export const nativeNotify = {
+  supported: (): boolean => !!android()?.notify,
+  allowed: (): boolean => { try { return !!android()?.notificationsAllowed?.(); } catch { return false; } },
+  request: (): void => { try { android()?.requestNotifications?.(); } catch { /* old shell */ } },
+  show: (title: string, text: string): void => { try { android()?.notify?.(title, text); } catch { /* old shell */ } },
+};
 
 /** Inside the Android app: tells the native side where the server is and how to pass Cloudflare Access (it adds the headers to the app's own requests). A browser has no bridge and nothing happens. */
 export function syncNative(s: Pick<DeviceSettings, 'serverUrl' | 'token' | 'cfAccessId' | 'cfAccessSecret'>): void {

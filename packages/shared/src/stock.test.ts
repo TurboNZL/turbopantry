@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { GROUPS, groupOrder, plentyInStock, parseQuickAdd, searchItems, titleCase, sectionOf, cleanItemName, fineStep, prettyStock, suggestItemUnit, convertAmount, defaultsForUnit, displayAmount, formatStock, guessCategory, gramsPerCupFor, itemKey, matchItems, parseIngredient, stockStatus, type Item } from './index.ts';
+import { GROUPS, findDuplicates, pairKey, roundNice, parseIngredientBlock, groupOrder, plentyInStock, parseQuickAdd, searchItems, titleCase, sectionOf, cleanItemName, fineStep, prettyStock, suggestItemUnit, convertAmount, defaultsForUnit, displayAmount, formatStock, guessCategory, gramsPerCupFor, itemKey, matchItems, parseIngredient, stockStatus, type Item } from './index.ts';
 
-const item = (o: Partial<Item> & { name: string }): Item => ({ id: 1, aliases: [], category: 'Sauces & condiments', mode: 'amount', unit: null, qty: 0, step: 1, defaultQty: 1, minQty: 0, tracked: true, recipeOnly: false, gramsPerCup: null, place: null, ...o });
+const item = (o: Partial<Item> & { name: string }): Item => ({ id: 1, aliases: [], category: 'Sauces & condiments', mode: 'amount', unit: null, qty: 0, step: 1, defaultQty: 1, minQty: 0, tracked: true, gramsPerCup: null, place: null, ...o });
 
 describe('convertAmount', () => {
   it('converts inside a kind exactly', () => {
@@ -41,7 +41,7 @@ describe('displayAmount', () => {
   it('original is as written', () => { expect(d('8 oz butter', 'original')).toBe('8 oz'); expect(d('1 cup flour', 'original')).toBe('1 cup'); });
   it('metric + cups converts imperial and keeps cups and spoons', () => {
     expect(d('8 oz butter', 'metric-cups')).toBe('225 g');
-    expect(d('1 lb mince', 'metric-cups')).toBe('455 g');
+    expect(d('1 lb mince', 'metric-cups')).toBe('450 g'); // 453.6 g reads as 450
     expect(d('3 lb potatoes', 'metric-cups')).toBe('1.36 kg');
     expect(d('1 pint milk', 'metric-cups')).toBe('475 ml');
     expect(d('1 cup flour', 'metric-cups')).toBe('1 cup');
@@ -184,4 +184,23 @@ describe('quick add', () => {
     expect(plentyInStock({ qty: 600, step: 250, tracked: true })).toBe(true);
     expect(plentyInStock({ qty: 5, step: 1, tracked: false })).toBe(false);
   });
+});
+
+describe('findDuplicates', () => {
+  const mk = (id: number, name: string) => item({ id, name });
+  it('finds less specific names and spelling variants, but not different kinds', () => {
+    const found = findDuplicates([mk(1, 'Parmesan'), mk(2, 'Parmesan Cheese'), mk(3, 'Yoghurt'), mk(4, 'Yogurt'), mk(5, 'Penne Pasta'), mk(6, 'Fettuccine Pasta'), mk(7, 'Milk')]);
+    expect(found.map((p) => [p.a.id, p.b.id, p.reason])).toEqual([[1, 2, 'less-specific'], [3, 4, 'spelling']]);
+  });
+  it('leaves out pairs already said to be different', () => {
+    expect(findDuplicates([mk(1, 'Parmesan'), mk(2, 'Parmesan Cheese')], new Set([pairKey(2, 1)]))).toEqual([]);
+  });
+});
+describe('each lists and rounding', () => {
+  it('splits a shared amount', () => {
+    expect(parseIngredientBlock('Seasonings (1 tsp each): paprika, garlic powder, salt, pepper, italian seasoning').map((i) => [i.quantity, i.unit, i.name])).toEqual([[1, 'tsp', 'paprika'], [1, 'tsp', 'garlic powder'], [1, 'tsp', 'salt'], [1, 'tsp', 'pepper'], [1, 'tsp', 'italian seasoning']]);
+    expect(parseIngredientBlock('2 eggs')).toHaveLength(1);
+  });
+  it('drops "of your choice" from the name', () => { const p = parseIngredient('8 oz (225g) pasta of your choice'); expect(p.name).toBe('pasta'); expect(p.note).toContain('225g'); });
+  it('rounds converted weights to 450', () => { expect(roundNice(453.6)).toBe(450); expect(roundNice(227)).toBe(225); expect(roundNice(110)).toBe(110); expect(roundNice(12.4)).toBe(12); });
 });

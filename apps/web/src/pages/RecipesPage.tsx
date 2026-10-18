@@ -65,7 +65,7 @@ export function RecipesPage() {
       {(groups.data?.length ?? 0) > 0 && (
         <div className="-mx-1 flex flex-wrap gap-2 px-1" role="group" aria-label="Recipe groups">
           <button className="chip min-h-[2.5rem] px-3" aria-pressed={!group} onClick={() => pickGroup(null)} data-active={!group || undefined}>All</button>
-          {groups.data!.map((g) => <button key={g.id} className="chip min-h-[2.5rem] px-3" aria-pressed={group === g.id} onClick={() => pickGroup(group === g.id ? null : g.id)} data-active={group === g.id || undefined}>{g.name} <span className="text-xs opacity-60">{g.count}</span></button>)}
+          {groups.data!.map((g) => <button key={g.id} className="chip min-h-[2.5rem] px-3" aria-pressed={group === g.id} onClick={() => pickGroup(group === g.id ? null : g.id)} data-active={group === g.id || undefined}>{g.name}<span className="ml-2 text-xs opacity-60">{g.count}</span></button>)}
         </div>
       )}
       {error && <LoadError error={error} />}

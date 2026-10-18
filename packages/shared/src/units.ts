@@ -50,10 +50,11 @@ export function convertAmount(qty: number, from: string | null, to: string | nul
   return (qty * MASS_G[from!]!) / gPerMl / VOL_ML[to!]!;
 }
 
-/** Kitchen rounding: whole numbers under 20, then steps of 5. */
+/** Kitchen rounding of a converted amount: whole numbers under 20, steps of 5 under 200, then of 25 (453.6 g is 450 g, 227 g is 225 g). */
 export function roundNice(n: number): number {
   if (n < 20) return Math.round(n);
-  return Math.round(n / 5) * 5;
+  if (n < 200) return Math.round(n / 5) * 5;
+  return Math.round(n / 25) * 25;
 }
 
 const trim = (n: number) => String(Math.round(n * 100) / 100);

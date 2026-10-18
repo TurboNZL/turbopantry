@@ -100,6 +100,8 @@ export function parseIngredient(line: string, section: string | null = null): In
   const comma = rest.indexOf(',');
   if (comma > 0) { notes.push(rest.slice(comma + 1).trim()); rest = rest.slice(0, comma); }
 
+  const choice = /\s+of (?:your|their) choice\b/i.exec(rest) ?? /\s+of choice\b/i.exec(rest); // "pasta of your choice" is pasta
+  if (choice) { rest = rest.replace(choice[0], ''); notes.push(choice[0].trim()); }
   out.name = rest.replace(/\s+/g, ' ').trim() || raw;
   out.note = notes.filter(Boolean).join('; ') || null;
   return out;
@@ -112,6 +114,17 @@ export function sectionHeading(line: string): string | null {
   return m[1]!.replace(/^for (the )?/i, '').trim() || null;
 }
 
+/**
+ * One line that lists several things with one shared amount becomes one line each: "Seasonings (1 tsp each): paprika, garlic powder, salt"
+ * is "1 tsp paprika", "1 tsp garlic powder", "1 tsp salt". Any other line is returned as it is.
+ */
+export function expandEachLine(line: string): string[] {
+  const m = new RegExp(String.raw`^[^:]*?\(?\s*(${QTY}\s*[A-Za-z.]*)\s+each\s*\)?\s*(?:of\s+)?[:：-]\s*(.+)$`, 'i').exec(line.trim());
+  if (!m) return [line];
+  const parts = m[2]!.split(/\s*(?:,|;|\band\b|&)\s*/i).map((p) => p.trim().replace(/[.]+$/, '')).filter(Boolean);
+  return parts.length > 1 ? parts.map((p) => `${m[1]!.trim()} ${p}`) : [line];
+}
+
 /** Parses a block of text, one ingredient per line. A line ending in ":" or starting with "#" starts a new section. */
 export function parseIngredientBlock(text: string): Ingredient[] {
   const out: Ingredient[] = [];
@@ -122,7 +135,7 @@ export function parseIngredientBlock(text: string): Ingredient[] {
     if (t.startsWith('#')) { section = t.replace(/^#+\s*/, '').replace(/:$/, '').trim() || null; continue; }
     const head = sectionHeading(t);
     if (head) { section = head; continue; }
-    out.push(parseIngredient(t, section));
+    for (const one of expandEachLine(t)) out.push(parseIngredient(one, section));
   }
   return out;
 }

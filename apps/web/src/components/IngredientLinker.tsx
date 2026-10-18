@@ -80,6 +80,29 @@ function Row({ ing, items, choice, onPick }: { ing: Ingredient; items: Item[]; c
   );
 }
 
+/** One unsure line, asked as a question: "Is X the same as Y?" Yes links it (and remembers the wording), No makes it its own item. Anything else is one tap away. */
+function Question({ ing, items, choice, onPick }: { ing: Ingredient; items: Item[]; choice: Choice; onPick(c: Choice): void }) {
+  const [other, setOther] = useState(false);
+  const m = matchItems(ing.name, items);
+  const guess = m.candidates[0];
+  if (!guess) return null;
+  const yes = choice.kind === 'item' && choice.id === guess.item.id, no = choice.kind === 'new';
+  return (
+    <div className="space-y-2 py-3">
+      <div className="text-sm"><span className="text-muted">Recipe says </span><strong className="font-semibold">{ing.raw}</strong></div>
+      <div className="text-base">Is that the same as <strong>{titleCase(guess.item.name)}</strong>? <span className="text-xs text-muted">({KIND[guess.kind]})</span></div>
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" aria-pressed={yes} className={`btn h-11 ${yes ? 'btn-accent' : ''}`} onClick={() => onPick({ kind: 'item', id: guess.item.id, alias: true })}>Yes, the same</button>
+        <button type="button" aria-pressed={no} className={`btn h-11 ${no ? 'btn-accent' : ''}`} onClick={() => onPick({ kind: 'new', name: newName(ing) })}>No, a different item</button>
+      </div>
+      {yes && <p className="text-xs text-muted">“{ing.name}” will link to {titleCase(guess.item.name)} by itself next time.</p>}
+      {no && <input className="input h-11" aria-label="Name of the new item" value={choice.kind === 'new' ? choice.name : ''} onChange={(e) => onPick({ kind: 'new', name: e.target.value })} />}
+      <button type="button" className="text-sm text-muted underline" onClick={() => setOther(!other)}>{other ? 'Hide other choices' : 'Something else…'}</button>
+      {other && <Row ing={ing} items={items} choice={choice} onPick={onPick} />}
+    </div>
+  );
+}
+
 /**
  * Links a recipe's lines to the household's items. Only the lines that could be something you already have are shown; the rest quietly become
  * new items (so "do I have it?" works and the shopping list sorts them into aisles). The kind of ingredient matters: a recipe's "fettuccine" is
@@ -94,8 +117,11 @@ export function IngredientLinker({ ingredients, items, choices, onChange }: { in
   return (
     <section className="card space-y-2 p-4" aria-label="Link to your items">
       <h2 className="flex items-center gap-2 font-semibold"><Link2 size={16} />Link to your items</h2>
-      <p className="text-sm text-muted">{linked} linked to items you already have, {fresh} new. {attention.length ? `${attention.length} could be something you already have: check ${attention.length === 1 ? 'it' : 'them'}.` : 'Nothing needs checking.'} The recipe keeps its own wording.</p>
-      <div className="divide-y divide-line">{rows.map((ing, i) => <Row key={`${ing.raw}-${i}`} ing={ing} items={items} choice={choices[ing.raw] ?? { kind: 'none' }} onPick={(c) => onChange({ ...choices, [ing.raw]: c })} />)}</div>
+      <p className="text-sm text-muted">Everything is linked for you: {linked} to items you already have, {fresh} as new items. {attention.length ? `${attention.length} ${attention.length === 1 ? 'was' : 'were'} not sure, so ${attention.length === 1 ? 'it asks' : 'they ask'} below.` : 'Nothing needs checking.'} The recipe keeps its own wording.</p>
+      <div className="divide-y divide-line">{rows.map((ing, i) => {
+        const asks = attention.includes(ing), Comp = asks ? Question : Row;
+        return <Comp key={`${ing.raw}-${i}`} ing={ing} items={items} choice={choices[ing.raw] ?? { kind: 'none' }} onPick={(c) => onChange({ ...choices, [ing.raw]: c })} />;
+      })}</div>
       {ingredients.length > attention.length && <button type="button" className="btn btn-ghost h-11" onClick={() => setAll(!all)}>{all ? 'Show only the ones to check' : `Show all ${ingredients.length}`}</button>}
     </section>
   );
