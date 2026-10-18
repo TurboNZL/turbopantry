@@ -13,6 +13,8 @@ export interface DeviceSettings {
   unitMode: 'original' | 'metric-cups' | 'metric-grams';
   /** Show the faux-3D kitchen and shop maps (off = nothing 3D is even loaded). */
   view3d: boolean;
+  /** The shopping list's Store view as a 3D map (its own switch: the kitchen view and this one are independent). */
+  listMap3d: boolean;
   /** Android app only, opt-in: a notification when someone else changes the shopping list. */
   listNotifications: boolean;
   /** Shopping: the shop layout the list is ordered by (null = the default order). */
@@ -29,13 +31,17 @@ export interface DeviceSettings {
 
 export const DEFAULT_SETTINGS: DeviceSettings = {
   theme: 'auto', ui: 'auto', layout: 'side', glass: 'regular', wallpaper: false, wallpaperCustom: false, wallpaperDarkness: 0.35,
-  showQuantities: true, unitMode: 'original', storeId: null, view3d: false, listNotifications: false, themeUpdates: true, themesToken: '', serverUrl: '', token: '', cfAccessId: '', cfAccessSecret: '',
+  showQuantities: true, unitMode: 'original', storeId: null, view3d: false, listMap3d: false, listNotifications: false, themeUpdates: true, themesToken: '', serverUrl: '', token: '', cfAccessId: '', cfAccessSecret: '',
 };
 
 const KEY = 'turbopantry.settings';
 
 export function loadSettings(): DeviceSettings {
-  try { return { ...DEFAULT_SETTINGS, ...(JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<DeviceSettings>) }; }
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<DeviceSettings>;
+    // before the shop map had its own switch it followed the kitchen one: keep what a device already had
+    return { ...DEFAULT_SETTINGS, ...(saved.listMap3d === undefined && saved.view3d ? { listMap3d: true } : {}), ...saved };
+  }
   catch { return { ...DEFAULT_SETTINGS }; }
 }
 

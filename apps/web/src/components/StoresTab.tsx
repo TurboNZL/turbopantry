@@ -39,8 +39,8 @@ function Layout({ store, onChanged }: { store: Store; onChanged(): void }) {
         <button className={cn('btn h-11', mine && 'btn-accent')} onClick={() => updateSettings({ storeId: mine ? null : store.id })} aria-pressed={mine}>{mine ? <><Check size={16} className="mr-1 inline" />Shopping here</> : 'Shop here'}</button>
         <button className="btn h-11 !px-3" onClick={() => void remove()} aria-label="Delete layout"><Trash2 size={18} /></button>
       </div>
-      {settings.view3d && <Segmented<'order' | 'map'> label="Store view" value={view} onChange={setView} options={[{ value: 'order', label: 'Order' }, { value: 'map', label: 'Map' }]} />}
-      {settings.view3d && view === 'map' ? <MapPanel store={store} /> : <>
+      {(settings.view3d || settings.listMap3d) && <Segmented<'order' | 'map'> label="Store view" value={view} onChange={setView} options={[{ value: 'order', label: 'Order' }, { value: 'map', label: 'Map' }]} />}
+      {(settings.view3d || settings.listMap3d) && view === 'map' ? <MapPanel store={store} /> : <>
         <p className="text-sm text-muted">The order you walk the shop in. Drag a group, or use the arrows. The shopping list follows it while “Shopping here” is on.</p>
         <ol className="divide-y divide-line overflow-hidden rounded-theme border border-line">
           {order.map((g, i) => (

@@ -25,6 +25,8 @@ export interface Item {
   /** Overrides the built-in weight of a cup for this item. */
   gramsPerCup: number | null;
   place: string | null;
+  /** Must never run out: the moment it is out (or at or below "keep at least") it goes on the shopping list by itself. */
+  essential: boolean;
 }
 
 export const COUNT_MODES = ['amount', 'chunks', 'weight'] as const;

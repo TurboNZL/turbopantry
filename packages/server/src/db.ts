@@ -129,6 +129,8 @@ const MIGRATIONS: string[] = [
      b INTEGER NOT NULL,
      PRIMARY KEY (a, b)
    );`,
+  // items that must never run out: they go on the shopping list by themselves when they are out or low
+  `ALTER TABLE items ADD COLUMN essential INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 export type Db = DatabaseSync;

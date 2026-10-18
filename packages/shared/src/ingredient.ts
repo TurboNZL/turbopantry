@@ -59,6 +59,13 @@ export function normaliseQuantityText(text: string): string {
   return t;
 }
 
+const ADJECTIVES = new Set(['large', 'small', 'medium', 'big', 'fresh', 'ripe', 'frozen', 'dried', 'dry', 'raw', 'cooked', 'whole', 'lean', 'thick', 'thin', 'hot', 'cold', 'warm', 'soft', 'firm', 'organic', 'free-range', 'extra', 'good', 'quality', 'plain', 'light', 'heavy', 'mild', 'sweet']);
+/** A comma-separated piece that only describes ("boneless", "finely chopped", "large"), so it cannot be the ingredient itself. */
+function describesOnly(seg: string): boolean {
+  const words = seg.toLowerCase().split(/[\s-]+/).filter(Boolean);
+  return words.length > 0 && words.length <= 3 && words.every((w) => ADJECTIVES.has(w) || /^(?:.{3,}less|.{2,}ly|.{4,}ed)$/.test(w));
+}
+
 /**
  * Splits one ingredient line into quantity, unit, name and note. Never throws and never drops text: when it cannot find a
  * quantity the whole line becomes the name, and `raw` always holds the original.
@@ -97,6 +104,20 @@ export function parseIngredient(line: string, section: string | null = null): In
   // trailing ", diced" and "(optional)" are notes, not part of the name
   const parens = [...rest.matchAll(/\(([^)]*)\)/g)].map((x) => x[1]!.trim()).filter(Boolean);
   if (parens.length) { notes.push(...parens); rest = rest.replace(/\s*\([^)]*\)/g, ''); }
+  // "boneless, skinless, chicken breast": words that only describe come before the comma, so they are notes and the name is what follows
+  const lead: string[] = [];
+  for (let c = rest.indexOf(','); c > 0; c = rest.indexOf(',')) {
+    const seg = rest.slice(0, c).trim(), after = rest.slice(c + 1).trim();
+    if (!after || !describesOnly(seg)) break;
+    lead.push(seg); rest = after;
+  }
+  if (lead.length) { // the description may carry on without a comma: "boneless, skinless chicken breast"
+    for (let w = rest.split(' '); w.length > 2 || (w.length === 2 && !rest.includes(',')); w = rest.split(' ')) {
+      if (!describesOnly(w[0]!) || rest.slice(w[0]!.length).trimStart().startsWith(',')) break;
+      lead.push(w[0]!); rest = w.slice(1).join(' ');
+    }
+    notes.push(lead.join(', '));
+  }
   const comma = rest.indexOf(',');
   if (comma > 0) { notes.push(rest.slice(comma + 1).trim()); rest = rest.slice(0, comma); }
 

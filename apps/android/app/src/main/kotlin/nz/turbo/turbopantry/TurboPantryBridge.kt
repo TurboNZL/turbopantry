@@ -32,6 +32,10 @@ class TurboPantryBridge(private val context: Context, @Suppress("unused") privat
     @JavascriptInterface fun setAccess(id: String, secret: String) { runCatching { prefs.cfId = id; prefs.cfSecret = secret } }
     @JavascriptInterface fun accessInjected(): Boolean = true
 
+    // ---- the full-screen recipe: while it is open, leaving the app shrinks it into a floating window (picture in picture) with step buttons
+    @JavascriptInterface fun cookMode(on: Boolean) { (context as? MainActivity)?.let { a -> a.runOnUiThread { a.setCookMode(on) } } }
+    @JavascriptInterface fun enterPip() { (context as? MainActivity)?.let { a -> a.runOnUiThread { a.enterPip() } } }
+
     // ---- opt-in notifications when someone else changes the shopping list (the page decides when; Settings > Server > Notifications turns it on)
     @JavascriptInterface fun notificationsAllowed(): Boolean =
         Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED

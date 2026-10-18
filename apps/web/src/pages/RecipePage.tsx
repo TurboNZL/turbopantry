@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { FolderPlus, Maximize2, ChefHat, Clock, ExternalLink, Hash, Link2, Minus, Pencil, Plus, ShoppingCart, Trash2, Users } from 'lucide-react';
+import { FolderPlus, Maximize2, ChefHat, Clock, ExternalLink, Link2, Minus, Pencil, Plus, ShoppingCart, Trash2, Users } from 'lucide-react';
 import { UNIT_MODES, formatQuantity, unscalableLines, displayAmount, highlightStep, prettyStock, stockStatus, type Ingredient, type Item, type Recipe, type StockStatus } from '@turbopantry/shared';
 import { CookSheet } from '../components/CookSheet.tsx';
 import { RecipeGroupsSheet } from '../components/RecipeGroupsSheet.tsx';
 import { RecipeFullscreen } from '../components/RecipeFullscreen.tsx';
 import { defaultChoices, IngredientLinker, resolveLinks, type Choices } from '../components/IngredientLinker.tsx';
+import { Select } from '../components/Select.tsx';
 import { Sheet } from '../components/Sheet.tsx';
 import { LoadError } from '../components/SignInNotice.tsx';
 import { RecipeImage } from './RecipesPage.tsx';
@@ -128,22 +129,17 @@ export function RecipePage() {
         <section className="card space-y-3 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-semibold">Ingredients</h2>
-            {showQuantities && (
-              <div className="flex items-center gap-1 text-sm" role="group" aria-label="Servings">
-                <button className="btn btn-ghost flex h-11 w-11 items-center justify-center !p-0" aria-label="Fewer servings" onClick={() => setServings(Math.max(known ? 1 : 0.5, shown - (known ? 1 : 0.5)))}><Minus size={16} /></button>
-                <span className="inline-flex min-w-[5.5rem] items-center justify-center gap-1 tabular-nums"><Users size={13} />{known ? `${shown} ${shown === 1 ? 'serving' : 'servings'}` : `${formatQuantity(shown)}× batch`}</span>
-                <button className="btn btn-ghost flex h-11 w-11 items-center justify-center !p-0" aria-label="More servings" onClick={() => setServings(shown + (known ? 1 : 0.5))}><Plus size={16} /></button>
-              </div>
-            )}
+            <Select className="h-10 min-w-[11rem] !py-0 text-sm" aria-label="How amounts are shown" value={showQuantities ? mode : 'off'}
+              onChange={(v) => (v === 'off' ? updateSettings({ showQuantities: false }) : updateSettings({ showQuantities: true, unitMode: v as typeof mode }))}
+              options={[...UNIT_MODES.map((m) => ({ value: m.id, label: m.label })), { value: 'off', label: 'Hide amounts' }]} />
           </div>
-          <div className="flex flex-wrap gap-2" role="group" aria-label="How amounts are shown">
-            <button type="button" className="chip inline-flex min-h-[2.5rem] items-center gap-1 px-3" aria-pressed={showQuantities} onClick={() => updateSettings({ showQuantities: !showQuantities })}><Hash size={14} />{showQuantities ? 'Amounts on' : 'Amounts off'}</button>
-            {showQuantities && (
-              <select className="input h-10 !w-auto !py-0 text-sm" aria-label="Units" value={mode} onChange={(e) => updateSettings({ unitMode: e.target.value as typeof mode })}>
-                {UNIT_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-              </select>
-            )}
-          </div>
+          {showQuantities && (
+            <div className="flex items-center gap-1 text-sm" role="group" aria-label="Servings">
+              <button className="btn btn-ghost flex h-11 w-11 items-center justify-center !p-0" aria-label="Fewer servings" onClick={() => setServings(Math.max(known ? 1 : 0.5, shown - (known ? 1 : 0.5)))}><Minus size={16} /></button>
+              <span className="inline-flex min-w-[5.5rem] items-center justify-center gap-1 tabular-nums"><Users size={13} />{known ? `${shown} ${shown === 1 ? 'serving' : 'servings'}` : `${formatQuantity(shown)}× batch`}</span>
+              <button className="btn btn-ghost flex h-11 w-11 items-center justify-center !p-0" aria-label="More servings" onClick={() => setServings(shown + (known ? 1 : 0.5))}><Plus size={16} /></button>
+            </div>
+          )}
           {factor !== 1 && showQuantities && unscalableLines(r.ingredients).length > 0 && <p className="rounded-theme bg-warn/15 p-3 text-sm" role="status">{unscalableLines(r.ingredients).length === 1 ? 'This line has an amount' : 'These lines have amounts'} that could not be read, so {unscalableLines(r.ingredients).length === 1 ? 'it stays' : 'they stay'} as written: {unscalableLines(r.ingredients).join('; ')}</p>}
           {r.ingredients.length ? <IngredientList items={r.ingredients} factor={factor} showQuantities={showQuantities} mode={mode} byId={byId} /> : <p className="text-sm text-muted">No ingredients.</p>}
         </section>

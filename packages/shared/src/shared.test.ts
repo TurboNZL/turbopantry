@@ -65,3 +65,13 @@ describe('amounts scale with the servings, however they are written', () => {
   });
   it('normalises the start of a line only', () => expect(normaliseQuantityText('1⁄2 cup of 1 / 2 and .5')).toBe('1/2 cup of 1 / 2 and .5'));
 });
+
+describe('descriptions before the name', () => {
+  it('keeps "boneless, skinless" as a note, not as the item', () => {
+    expect(parseIngredient('500 g boneless, skinless chicken breast')).toMatchObject({ name: 'chicken breast', note: 'boneless, skinless', unit: 'g' });
+    expect(parseIngredient('2 boneless, skinless, chicken breasts')).toMatchObject({ name: 'chicken breasts', note: 'boneless, skinless' });
+    expect(parseIngredient('2 large, ripe tomatoes')).toMatchObject({ name: 'tomatoes', note: 'large, ripe' });
+    expect(parseIngredient('500g chicken breast, boneless, skinless')).toMatchObject({ name: 'chicken breast', note: 'boneless, skinless' });
+    expect(parseIngredient('1 onion, finely diced')).toMatchObject({ name: 'onion', note: 'finely diced' });
+  });
+});

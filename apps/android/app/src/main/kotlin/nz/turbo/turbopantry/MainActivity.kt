@@ -1,7 +1,16 @@
 package nz.turbo.turbopantry
 
 import android.annotation.SuppressLint
+import android.app.PendingIntent
+import android.app.PictureInPictureParams
+import android.app.RemoteAction
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.res.Configuration
+import android.graphics.drawable.Icon
+import android.util.Rational
 import android.net.Uri
 import android.os.Bundle
 import android.webkit.ValueCallback
@@ -17,6 +26,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -33,6 +43,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var web: WebView
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var promptedFor: String? = null
+    /** the full-screen recipe is open: leaving the app turns it into a small floating window instead of hiding it */
+    private var cooking = false
+    private var inPip = false
+    private val pipReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val a = intent.getStringExtra(PIP_STEP) ?: return
+            if (a == "prev" || a == "next") web.evaluateJavascript("window.dispatchEvent(new CustomEvent('turbopantry-cook',{detail:'$a'}))", null)
+        }
+    }
     private val chooser = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         fileCallback?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(r.resultCode, r.data))
         fileCallback = null
@@ -103,6 +122,8 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        ContextCompat.registerReceiver(this, pipReceiver, IntentFilter(PIP_ACTION), ContextCompat.RECEIVER_NOT_EXPORTED)
+
         AppUpdater.listener = { s ->
             runOnUiThread {
                 web.evaluateJavascript("window.dispatchEvent(new CustomEvent('turbopantry-update',{detail:${s.json()}}))", null)
@@ -147,10 +168,39 @@ class MainActivity : AppCompatActivity() {
         return ShareLink.importPath(url)
     }
 
+    fun setCookMode(on: Boolean) { cooking = on }
+
+    /** Shrinks the app into a floating window with previous / next step buttons (Android 8 and later; the page is told through `turbopantry-pip`). */
+    fun enterPip() {
+        if (isFinishing || inPip) return
+        fun action(label: String, icon: Int, step: String, code: Int) = RemoteAction(
+            Icon.createWithResource(this, icon), label, label,
+            PendingIntent.getBroadcast(this, code, Intent(PIP_ACTION).setPackage(packageName).putExtra(PIP_STEP, step), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT),
+        )
+        val params = PictureInPictureParams.Builder()
+            .setAspectRatio(Rational(4, 5))
+            .setActions(listOf(action("Previous step", android.R.drawable.ic_media_previous, "prev", 1), action("Next step", android.R.drawable.ic_media_next, "next", 2)))
+            .build()
+        runCatching { enterPictureInPictureMode(params) }
+    }
+
+    /** Pressing Home (or switching apps) while a recipe is open in full screen. */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (cooking) enterPip()
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        inPip = isInPictureInPictureMode
+        web.evaluateJavascript("window.dispatchEvent(new CustomEvent('turbopantry-pip',{detail:$isInPictureInPictureMode}))", null)
+    }
+
     override fun onSaveInstanceState(outState: Bundle) { super.onSaveInstanceState(outState); web.saveState(outState) }
 
     override fun onDestroy() {
         AppUpdater.listener = null
+        runCatching { unregisterReceiver(pipReceiver) }
         web.destroy()
         super.onDestroy()
     }
@@ -199,5 +249,7 @@ class MainActivity : AppCompatActivity() {
          */
         const val HOST = "localhost"
         const val BACKGROUND = 0xFF0B0B10.toInt()
+        const val PIP_ACTION = "nz.turbo.turbopantry.PIP_STEP"
+        const val PIP_STEP = "step"
     }
 }

@@ -57,6 +57,16 @@ export function addToList(db: Db, input: AddInput, user: string, recipeId: numbe
   return toEntry(getEntry(db, Number(res.lastInsertRowid))!);
 }
 
+/**
+ * Items marked "can't run out" that are out (or at or below "keep at least") and not already on the list are put on it, at their usual amount.
+ * Returns how many were added. Call it after anything that lowers stock or marks an item essential.
+ */
+export function topUpEssentials(db: Db, user: string): number {
+  const rows = db.prepare(`SELECT i.id FROM items i WHERE i.essential = 1 AND i.qty <= i.min_qty AND NOT EXISTS (SELECT 1 FROM list_items l WHERE l.item_id = i.id AND l.checked = 0)`).all() as { id: number }[];
+  for (const r of rows) addToList(db, { itemId: r.id, stock: 'keep' }, user);
+  return rows.length;
+}
+
 /** How much of a ticked entry goes into stock, in the item's own unit (null when the units cannot be compared: then the plain number is used). */
 function stockAmount(entry: Row, item: Item): number {
   if (entry.qty === null) return item.defaultQty;

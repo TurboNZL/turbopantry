@@ -96,3 +96,18 @@ describe('import preview', () => {
     expect(((await call('GET', '/api/items')).body as any[]).length).toBe(before);
   });
 });
+
+describe('items you cannot run out of', () => {
+  it('goes on the list by itself when it is marked out, and when it is marked essential while out', async () => {
+    const milk = (await call('POST', '/api/items', { name: 'Essential Milk', qty: 2, unit: null })).body.item ?? (await call('POST', '/api/items', { name: 'Essential Milk' })).body;
+    const id = milk.id;
+    expect((await call('PUT', `/api/items/${id}`, { essential: true })).body.essential).toBe(true);
+    const names = async () => ((await call('GET', '/api/list')).body as any[]).map((e) => e.itemId);
+    expect(await names()).not.toContain(id); // 2 in stock: fine
+    await call('POST', '/api/stock/adjust', { changes: [{ itemId: id, delta: -2 }], reason: 'out' });
+    expect(await names()).toContain(id);
+    expect(((await call('GET', '/api/list')).body as any[]).filter((e) => e.itemId === id)).toHaveLength(1);
+    await call('POST', '/api/stock/adjust', { changes: [{ itemId: id, delta: 0.0001 }], reason: 'manual' }); // not out and not low... but min is 0, so 0.0001 > 0
+    expect(((await call('GET', '/api/list')).body as any[]).filter((e) => e.itemId === id)).toHaveLength(1); // never twice
+  });
+});

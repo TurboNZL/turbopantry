@@ -7,6 +7,7 @@ export const STEP_H = 14;
 export interface Cam { yaw: number; pitch: number; zoom: number; px: number; py: number }
 export const MIN_PITCH = 12, MAX_PITCH = 82, MIN_ZOOM = 0.2, MAX_ZOOM = 3.5;
 const HOME: Omit<Cam, 'zoom'> = { yaw: 30, pitch: 55, px: 0, py: 0 };
+const OVERVIEW: Omit<Cam, 'zoom'> = { yaw: 0, pitch: 0, px: 0, py: 0 };
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -26,13 +27,21 @@ export interface CameraApi {
   setFit(z: number, cx: number, cy: number, content: boolean): void;
   /** Fit again if the camera has not been touched yet (used when blocks are added, so the first blocks are not tiny). */
   refit(): void;
+  /** Looking straight down at the whole plan (a map to point at) rather than from the corner. */
+  top: boolean;
+  /** Back to the straight-down overview. */
+  overview(): void;
+  /** Leave the overview and come in close, tilted, on a point of the floor (pixels from the floor's centre, as `setFit` takes them). */
+  closeUp(cx: number, cy: number): void;
   /** Always the latest camera, for event handlers. */
   ref: { current: Cam };
 }
 
 /** The camera for one floor plan: turn, tilt, zoom and pan, all clamped, plus "reset view". */
-export function useCamera(): CameraApi {
-  const [cam, setCam] = useState<Cam>({ ...HOME, zoom: 0.6 });
+export function useCamera(startTop = false): CameraApi {
+  const [top, setTop] = useState(startTop);
+  const topRef = useRef(startTop);
+  const [cam, setCam] = useState<Cam>({ ...(startTop ? OVERVIEW : HOME), zoom: 0.6 });
   const [drag, setDrag] = useState<'pan' | 'orbit'>('pan');
   const ref = useRef(cam);
   ref.current = cam;
@@ -42,11 +51,18 @@ export function useCamera(): CameraApi {
   const set = useCallback((n: Cam) => { ref.current = n; setCam(n); }, []);
   const patch = useCallback((f: (c: Cam) => Cam) => { touched.current = true; set(f(ref.current)); }, [set]);
   const home = useCallback((): Cam => {
-    const { z, cx, cy } = fit.current, a = (HOME.yaw * Math.PI) / 180, p = (HOME.pitch * Math.PI) / 180;
-    return { ...HOME, zoom: z, px: -z * (cx * Math.cos(a) - cy * Math.sin(a)), py: -z * (cx * Math.sin(a) + cy * Math.cos(a)) * Math.cos(p) };
+    const base = topRef.current ? OVERVIEW : HOME;
+    const { z, cx, cy } = fit.current, a = (base.yaw * Math.PI) / 180, p = (base.pitch * Math.PI) / 180;
+    return { ...base, zoom: z, px: -z * (cx * Math.cos(a) - cy * Math.sin(a)), py: -z * (cx * Math.sin(a) + cy * Math.cos(a)) * Math.cos(p) };
   }, []);
+  const closeUp = useCallback((cx: number, cy: number) => {
+    topRef.current = false; setTop(false); touched.current = true;
+    const z = clamp(Math.max(fit.current.z * 2.6, 0.9), MIN_ZOOM, 1.6), a = (HOME.yaw * Math.PI) / 180, p = (HOME.pitch * Math.PI) / 180;
+    set({ ...HOME, zoom: z, px: -z * (cx * Math.cos(a) - cy * Math.sin(a)), py: -z * (cx * Math.sin(a) + cy * Math.cos(a)) * Math.cos(p) });
+  }, [set]);
+  const overview = useCallback(() => { topRef.current = true; setTop(true); touched.current = false; set(home()); }, [set, home]);
   return {
-    cam, drag, setDrag, ref,
+    cam, drag, setDrag, ref, top, overview, closeUp,
     turn: useCallback((deg) => patch((c) => ({ ...c, yaw: ((c.yaw + deg) % 360 + 360) % 360 })), [patch]),
     tilt: useCallback((deg) => patch((c) => ({ ...c, pitch: clamp(c.pitch + deg, MIN_PITCH, MAX_PITCH) })), [patch]),
     zoomBy: useCallback((f) => patch((c) => ({ ...c, zoom: clamp(c.zoom * f, MIN_ZOOM, MAX_ZOOM) })), [patch]),

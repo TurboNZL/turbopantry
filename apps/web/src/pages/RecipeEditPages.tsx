@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useEffect } from 'react';
+import { Link2 } from 'lucide-react';
 import type { RecipeInput } from '@turbopantry/shared';
 import { EMPTY_RECIPE, RecipeForm } from '../components/RecipeForm.tsx';
 import { LoadError } from '../components/SignInNotice.tsx';
@@ -118,7 +119,7 @@ export function ImportPage() {
           {warnings.map((w) => <p key={w} className="rounded-theme bg-warn/15 p-3 text-sm" role="status">{w}</p>)}
           {alternative && <button type="button" className="btn btn-accent" disabled={busy} onClick={() => { setUrl(alternative.url); void fetchDraft(undefined, alternative.url); }}>Import from {alternative.label} instead</button>}
           <RecipeForm initial={draft} submitLabel="Save recipe" busy={saving} onSubmit={(r) => void submit(r)}>
-            {draft.ingredients.length > 0 && <IngredientLinker ingredients={draft.ingredients} items={items} choices={choices} onChange={setChoices} />}
+            {draft.ingredients.length > 0 && <section className="card space-y-3 p-4"><h2 className="flex items-center gap-2 font-semibold"><Link2 size={16} />Link to your items</h2><IngredientLinker ingredients={draft.ingredients} items={items} choices={choices} onChange={setChoices} /></section>}
           </RecipeForm>
         </div>
       )}

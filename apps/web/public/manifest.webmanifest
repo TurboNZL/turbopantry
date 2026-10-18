@@ -1,4 +1,6 @@
 {
+  "id": "/",
+  "scope": "/",
   "name": "TurboPantry",
   "short_name": "TurboPantry",
   "start_url": "/",
