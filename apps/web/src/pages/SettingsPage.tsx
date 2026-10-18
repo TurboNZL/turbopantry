@@ -3,17 +3,19 @@ import { AppearanceLayout, WallpaperCard } from '../components/AppearanceCard.ts
 import { GuidesTab } from '../components/GuidesTab.tsx';
 import { Section } from '../components/Section.tsx';
 import { ItemsTab } from '../components/ItemsTab.tsx';
+import { DuplicatesTab } from '../components/DuplicatesTab.tsx';
 import { StoresTab } from '../components/StoresTab.tsx';
 import { PairCard, ServerCard } from '../components/ServerCard.tsx';
 import { InstagramCard } from '../components/InstagramCard.tsx';
 import { ServerUpdateCard } from '../components/ServerUpdate.tsx';
 import { View3dCard } from '../components/View3dCard.tsx';
 import { ThemeUpdates } from '../components/ThemeUpdates.tsx';
+import { NotificationsCard } from '../components/NotificationsCard.tsx';
 import { AppUpdatesCard } from '../components/AppUpdatesCard.tsx';
 import { ErrorBoundary } from '../components/ErrorBoundary.tsx';
 import { cn } from '../lib/cn.ts';
 
-const TABS = [{ id: 'look', label: 'Appearance' }, { id: 'items', label: 'Items' }, { id: 'stores', label: 'Stores' }, { id: 'server', label: 'Server' }, { id: 'guides', label: 'Guides' }];
+const TABS = [{ id: 'look', label: 'Appearance' }, { id: 'items', label: 'Items' }, { id: 'duplicates', label: 'Duplicates' }, { id: 'stores', label: 'Stores' }, { id: 'server', label: 'Server' }, { id: 'guides', label: 'Guides' }];
 
 /** Settings: a tab strip that wraps instead of scrolling sideways (settings-shell convention), one titled panel per topic. */
 export function SettingsPage() {
@@ -36,8 +38,9 @@ export function SettingsPage() {
       </>}
       <ErrorBoundary key={tab} label={`The ${tab} tab`}>
       {tab === 'items' && <ItemsTab />}
+      {tab === 'duplicates' && <DuplicatesTab />}
       {tab === 'stores' && <StoresTab />}
-      {tab === 'server' && <><AppUpdatesCard /><ServerUpdateCard /><ServerCard /><PairCard /><InstagramCard /></>}
+      {tab === 'server' && <><AppUpdatesCard /><NotificationsCard /><ServerUpdateCard /><ServerCard /><PairCard /><InstagramCard /></>}
       {tab === 'guides' && <GuidesTab />}
       </ErrorBoundary>
     </div>

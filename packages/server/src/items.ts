@@ -1,4 +1,4 @@
-import { COUNT_MODES, GROUPS, defaultsForUnit, guessCategory, itemKey, type CountMode, type Item } from '@turbopantry/shared';
+import { COUNT_MODES, GROUPS, convertAmount, defaultsForUnit, findDuplicates, guessCategory, gramsPerCupFor, itemKey, pairKey, type CountMode, type DuplicatePair, type Item, type Ingredient } from '@turbopantry/shared';
 import { atomically, type Db } from './db.ts';
 
 interface Row {
@@ -7,11 +7,11 @@ interface Row {
 }
 const toItem = (r: Row): Item => ({
   id: r.id, name: r.name, aliases: JSON.parse(r.aliases) as string[], category: r.category, unit: r.unit, qty: r.qty, step: r.step, defaultQty: r.default_qty,
-  minQty: r.min_qty, mode: r.count_mode as CountMode, tracked: !!r.tracked, gramsPerCup: r.grams_per_cup, place: r.place, recipeOnly: !!r.recipe_only,
+  minQty: r.min_qty, mode: r.count_mode as CountMode, tracked: !!r.tracked, gramsPerCup: r.grams_per_cup, place: r.place,
 });
 
 /** An item that only a recipe knows about: made by linking, never stocked (and none now). Shown in the pantry only when asked for. */
-const SEL = 'SELECT i.*, (i.from_recipe = 1 AND i.qty = 0 AND NOT EXISTS (SELECT 1 FROM stock_log s WHERE s.item_id = i.id AND s.delta > 0)) AS recipe_only FROM items i';
+const SEL = 'SELECT i.* FROM items i';
 export const listItems = (db: Db): Item[] => (db.prepare(`${SEL} ORDER BY i.name COLLATE NOCASE`).all() as unknown as Row[]).map(toItem);
 export const getItem = (db: Db, id: number): Item | null => { const r = db.prepare(`${SEL} WHERE i.id = ?`).get(id) as Row | undefined; return r ? toItem(r) : null; };
 export const getItemByKey = (db: Db, key: string): Item | null => { const r = db.prepare(`${SEL} WHERE i.key = ?`).get(key) as Row | undefined; return r ? toItem(r) : null; };
@@ -69,7 +69,7 @@ export function createItem(db: Db, input: ItemInput): { item: Item; existed: boo
   const mode: CountMode = input.mode ?? (unit && ['g', 'kg', 'ml', 'l'].includes(unit) ? 'weight' : 'amount');
   const d = defaultsForUnit(unit, mode);
   const qty = input.qty ?? 0, minQty = input.minQty ?? 0;
-  const tracked = input.tracked ?? true; // every item is in the pantry; one made by linking a recipe says `fromRecipe` and stays hidden until stocked
+  const tracked = input.tracked ?? true; // every item is in the pantry; one made by linking a recipe says `fromRecipe` and simply starts at none (out)
   const res = db.prepare(`INSERT INTO items (name, key, aliases, category, unit, qty, step, default_qty, min_qty, count_mode, tracked, grams_per_cup, place, from_recipe) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(input.name, key, JSON.stringify(aliases), input.category ?? guessCategory(input.name), unit, qty, input.step ?? d.step, input.defaultQty ?? d.defaultQty, minQty, mode, tracked ? 1 : 0, input.gramsPerCup ?? null, input.place ?? null, input.fromRecipe ? 1 : 0);
   return { item: getItem(db, Number(res.lastInsertRowid))!, existed: false };
@@ -109,4 +109,44 @@ export function adjustStock(db: Db, changes: StockChange[], reason: string, user
     }
   });
   return { items: out, applied };
+}
+
+// ---------------------------------------------------------------- duplicates
+
+const dismissedPairs = (db: Db): Set<string> => new Set((db.prepare('SELECT a, b FROM item_pair_dismissed').all() as { a: number; b: number }[]).map((r) => pairKey(r.a, r.b)));
+
+/** Items that might be the same thing, minus the pairs the household said are different. */
+export const duplicateItems = (db: Db): DuplicatePair[] => findDuplicates(listItems(db), dismissedPairs(db));
+
+export function dismissPair(db: Db, x: number, y: number): void {
+  if (x === y || !getItem(db, x) || !getItem(db, y)) throw new ItemError(404, 'No such item.');
+  db.prepare('INSERT OR IGNORE INTO item_pair_dismissed (a, b) VALUES (?, ?)').run(Math.min(x, y), Math.max(x, y));
+}
+
+/**
+ * Folds item `from` into item `into`: the stock is added (converted when the units differ and can be compared), every shopping line, stock log
+ * entry and recipe ingredient that pointed at `from` now points at `into`, and the old name and aliases become aliases of `into`, so the
+ * recipe wordings that linked to it keep linking. All or nothing.
+ */
+export function mergeItems(db: Db, from: number, into: number): Item {
+  if (from === into) throw new ItemError(400, 'Pick two different items.');
+  const a = getItem(db, from), b = getItem(db, into);
+  if (!a || !b) throw new ItemError(404, 'No such item.');
+  atomically(db, () => {
+    const moved = a.qty > 0 ? convertAmount(a.qty, a.unit, b.unit, gramsPerCupFor(b.name, b.gramsPerCup)) : 0;
+    const qty = moved === null ? b.qty : Math.round((b.qty + moved) * 1e6) / 1e6;
+    const names = [a.name, ...a.aliases].filter((n) => itemKey(n) !== itemKey(b.name) && !b.aliases.some((x) => itemKey(x) === itemKey(n)));
+    db.prepare('UPDATE list_items SET item_id = ? WHERE item_id = ?').run(into, from);
+    db.prepare('UPDATE stock_log SET item_id = ? WHERE item_id = ?').run(into, from);
+    for (const r of db.prepare("SELECT id, ingredients FROM recipes WHERE ingredients LIKE '%\"itemId\"%'").all() as { id: number; ingredients: string }[]) {
+      const ings = JSON.parse(r.ingredients) as Ingredient[];
+      if (!ings.some((i) => i.itemId === from)) continue;
+      db.prepare('UPDATE recipes SET ingredients = ? WHERE id = ?').run(JSON.stringify(ings.map((i) => (i.itemId === from ? { ...i, itemId: into } : i))), r.id);
+    }
+    db.prepare('DELETE FROM item_pair_dismissed WHERE a = ? OR b = ?').run(from, from);
+    db.prepare('DELETE FROM items WHERE id = ?').run(from); // first, so its name is free to become an alias
+    const merged = [...new Set([...b.aliases, ...names])].slice(0, 30);
+    db.prepare("UPDATE items SET qty = ?, aliases = ?, tracked = 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(qty, JSON.stringify(merged), into);
+  });
+  return getItem(db, into)!;
 }

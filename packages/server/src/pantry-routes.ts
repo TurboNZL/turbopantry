@@ -3,7 +3,7 @@ import type { Item } from '@turbopantry/shared';
 import type { Db, User } from './db.ts';
 import type { Hub } from './events.ts';
 import { HttpError, json, readJson } from './http.ts';
-import { adjustStock, createItem, deleteItem, getItem, ItemError, listItems, updateItem, validateItem } from './items.ts';
+import { adjustStock, createItem, deleteItem, dismissPair, duplicateItems, getItem, ItemError, listItems, mergeItems, updateItem, validateItem } from './items.ts';
 import { addRecipeShortfall, addToList, clearChecked, deleteEntry, listEntries, updateEntry, type AddInput, type EntryPatch } from './list.ts';
 import { getRecipe } from './recipes.ts';
 
@@ -33,6 +33,19 @@ async function route(path: string, m: string, req: IncomingMessage, res: ServerR
       return true;
     }
     bad(res, 'Method not allowed', 405); return true;
+  }
+  if (path === '/api/items/duplicates' && m === 'GET') { json(res, 200, duplicateItems(db).map((p) => ({ a: p.a, b: p.b, reason: p.reason }))); return true; }
+  if (path === '/api/items/duplicates/dismiss' && m === 'POST') {
+    const body = await readJson(req);
+    if (!isObj(body) || !Number.isInteger(body.a) || !Number.isInteger(body.b)) { bad(res, 'Send {"a": 1, "b": 2}.'); return true; }
+    dismissPair(db, body.a as number, body.b as number); json(res, 200, { ok: true }); return true;
+  }
+  const merge = /^\/api\/items\/(\d+)\/merge$/.exec(path);
+  if (merge && m === 'POST') {
+    const body = await readJson(req);
+    if (!isObj(body) || !Number.isInteger(body.into)) { bad(res, 'Send {"into": itemId}.'); return true; }
+    const merged = mergeItems(db, Number(merge[1]), body.into as number);
+    hub.send('items', user.name); hub.send('list', user.name); hub.send('recipes', user.name); json(res, 200, merged); return true;
   }
   const oneItem = /^\/api\/items\/(\d+)$/.exec(path);
   if (oneItem) {

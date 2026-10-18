@@ -17,7 +17,7 @@
 .f3-floor { position: absolute; transform-style: preserve-3d; background-color: hsl(var(--surface));
   background-image: linear-gradient(hsl(var(--line) / .6) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--line) / .6) 1px, transparent 1px);
   background-size: 32px 32px; border: 2px solid hsl(var(--line)); box-sizing: content-box; margin: -2px 0 0 -2px; }
-.f3-block { position: absolute; transform-style: preserve-3d; }
+.f3-block { position: absolute; transform-style: preserve-3d; transform: translateZ(var(--z, 0px)); }
 .f3-block > i { position: absolute; display: block; background: var(--c); backface-visibility: hidden; box-sizing: border-box; }
 .f3-top { inset: 0; transform: translateZ(var(--h)); }
 .f3-s { left: 0; right: 0; top: calc(100% - var(--h)); height: var(--h); transform-origin: 50% 100%; transform: rotateX(-90deg); filter: brightness(.74); }
@@ -36,12 +36,12 @@
 
 /* labels: a flat layer above the scene, placed with the same camera variables (trigonometry in CSS keeps them in step with the animation) */
 .f3-labels { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
-.f3-label { position: absolute; display: inline-flex; align-items: center; gap: 3px; max-width: 130px; white-space: nowrap; transform: translate(-50%, -100%);
+.f3-label { position: absolute; display: inline-flex; align-items: center; gap: 3px; max-width: 200px; white-space: nowrap; transform: translate(-50%, -100%);
   left: calc(var(--f3-px) + var(--f3-z) * (var(--bx) * cos(var(--f3-yaw)) - var(--by) * sin(var(--f3-yaw))) * 1px);
   top: calc(var(--f3-py) + var(--f3-z) * ((var(--bx) * sin(var(--f3-yaw)) + var(--by) * cos(var(--f3-yaw))) * cos(var(--f3-pitch)) - var(--bz) * sin(var(--f3-pitch))) * 1px);
-  font-size: 11px; line-height: 1; font-weight: 600; padding: 3px 6px; border-radius: 999px; color: #111; background: rgb(255 255 255 / .92); box-shadow: 0 1px 3px rgb(0 0 0 / .35); }
+  font-size: 14px; line-height: 1.1; font-weight: 700; padding: 4px 9px; border-radius: 999px; color: #111; background: rgb(255 255 255 / .92); box-shadow: 0 1px 3px rgb(0 0 0 / .35); }
 .f3-label[data-sel] { box-shadow: 0 0 0 2px hsl(var(--accent)), 0 1px 3px rgb(0 0 0 / .35); z-index: 1; }
-.f3-label b { display: inline-flex; min-width: 16px; height: 16px; padding: 0 4px; align-items: center; justify-content: center; border-radius: 999px; font-size: 10px; font-weight: 700; color: #fff; background: #d97706; }
+.f3-label b { display: inline-flex; min-width: 20px; height: 20px; padding: 0 5px; align-items: center; justify-content: center; border-radius: 999px; font-size: 12px; font-weight: 700; color: #fff; background: #d97706; }
 .f3-label b.ok { background: #64748b; }
 .f3-label b.walk { background: hsl(var(--accent)); color: hsl(var(--accent-fg)); }
 .f3-label .t { overflow: hidden; text-overflow: ellipsis; }

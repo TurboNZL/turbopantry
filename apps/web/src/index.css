@@ -67,4 +67,8 @@ textarea.input { border-radius: min(var(--in-r, var(--ctl-r, 8px)), 1.25rem); pa
 .find-box { border: 1px solid hsl(var(--line)) !important; background: hsl(var(--raised)); }
 .find-box:focus { border-color: hsl(var(--accent)) !important; }
 
+.find-bar { background: hsl(var(--bg) / 0.9); }
+/* Spotify's main panel is the surface colour, not the page colour: a bar in the page colour is a black box behind the add field */
+[data-ui="spotify"] .find-bar { background: hsl(var(--surface) / 0.92); }
+
 .chip[aria-pressed="true"] { background: hsl(var(--accent)); color: hsl(var(--accent-fg)); }

@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { canPlace, footprint, holdsThings, snap, titleCase, type Block } from '@turbopantry/shared';
+import { canPlace, footprint, snap, titleCase, type Block } from '@turbopantry/shared';
 import { CELL, STEP_H, screenToFloor, type CameraApi } from './camera.ts';
 import './floor3d.css';
 
@@ -8,10 +8,10 @@ export interface BlockInfo { badge?: string | number; tone?: 'warn' | 'ok' | 'wa
 const FRONT: Record<number, string> = { 0: 's', 90: 'w', 180: 'n', 270: 'e' };
 
 const Block3D = memo(function Block3D({ b, selected, editable, hot }: { b: Block; selected: boolean; editable: boolean; hot?: boolean }) {
-  const f = footprint(b), wall = !holdsThings(b.kind);
-  const style = { left: b.x * CELL, top: b.y * CELL, width: f.w * CELL, height: f.d * CELL, '--h': `${b.h * STEP_H}px`, '--c': b.color } as CSSProperties;
+  const f = footprint(b);
+  const style = { left: b.x * CELL, top: b.y * CELL, width: f.w * CELL, height: f.d * CELL, '--h': `${b.h * STEP_H}px`, '--z': `${(b.z ?? 0) * STEP_H}px`, '--c': b.color } as CSSProperties;
   return (
-    <div className="f3-block" data-bid={b.id} data-kind={b.kind} data-front={FRONT[b.rot]} data-sel={selected || undefined} data-hot={hot || undefined} data-edit={editable || undefined} data-wall={(wall && !editable) || undefined} style={style}>
+    <div className="f3-block" data-bid={b.id} data-kind={b.kind} data-front={FRONT[b.rot]} data-sel={selected || undefined} data-hot={hot || undefined} data-edit={editable || undefined} style={style}>
       <i className="f3-top" /><i className="f3-s" /><i className="f3-n" /><i className="f3-e" /><i className="f3-w" />
     </div>
   );
@@ -26,8 +26,8 @@ const Labels = memo(function Labels({ blocks, size, selectedId, editable, info }
     <div className="f3-labels" aria-hidden>
       {blocks.map((b) => {
         const i = info?.get(b.id), f = footprint(b), sel = b.id === selectedId;
-        if ((!holdsThings(b.kind) && !sel && !editable) || (!b.label && i?.badge === undefined)) return null;
-        const style = { '--bx': ((b.x + f.w / 2) * CELL - (size * CELL) / 2), '--by': ((b.y + f.d / 2) * CELL - (size * CELL) / 2), '--bz': b.h * STEP_H + 4 } as CSSProperties;
+        if (!b.label && i?.badge === undefined) return null;
+        const style = { '--bx': ((b.x + f.w / 2) * CELL - (size * CELL) / 2), '--by': ((b.y + f.d / 2) * CELL - (size * CELL) / 2), '--bz': ((b.z ?? 0) + b.h) * STEP_H + 4 } as CSSProperties;
         return (
           <span key={b.id} className="f3-label" data-sel={sel || undefined} style={style}>
             {i?.badge !== undefined && i.tone === 'walk' && <b className="walk">{i.badge}</b>}
@@ -68,7 +68,7 @@ export function Scene3D({ cam, size, blocks, selectedId, editable = false, info,
   const extent = useMemo(() => {
     if (!blocks.length) return null;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, hh = 0;
-    for (const b of blocks) { const f = footprint(b); x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + f.w); y1 = Math.max(y1, b.y + f.d); hh = Math.max(hh, b.h); }
+    for (const b of blocks) { const f = footprint(b); x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + f.w); y1 = Math.max(y1, b.y + f.d); hh = Math.max(hh, (b.z ?? 0) + b.h); }
     return { x0, y0, x1, y1, hh };
   }, [blocks]);
   useEffect(() => {

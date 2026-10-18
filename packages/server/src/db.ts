@@ -123,6 +123,12 @@ const MIGRATIONS: string[] = [
      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
    );
    CREATE UNIQUE INDEX layouts_one ON layouts (kind, ifnull(store_id, 0));`,
+  // pairs of items the household said are different things (the duplicates monitor in Settings stops offering them), and opt-in list-change notifications per device
+  `CREATE TABLE item_pair_dismissed (
+     a INTEGER NOT NULL,
+     b INTEGER NOT NULL,
+     PRIMARY KEY (a, b)
+   );`,
 ];
 
 export type Db = DatabaseSync;

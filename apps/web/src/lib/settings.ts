@@ -13,6 +13,8 @@ export interface DeviceSettings {
   unitMode: 'original' | 'metric-cups' | 'metric-grams';
   /** Show the faux-3D kitchen and shop maps (off = nothing 3D is even loaded). */
   view3d: boolean;
+  /** Android app only, opt-in: a notification when someone else changes the shopping list. */
+  listNotifications: boolean;
   /** Shopping: the shop layout the list is ordered by (null = the default order). */
   storeId: number | null;
   themeUpdates: boolean;
@@ -27,7 +29,7 @@ export interface DeviceSettings {
 
 export const DEFAULT_SETTINGS: DeviceSettings = {
   theme: 'auto', ui: 'auto', layout: 'side', glass: 'regular', wallpaper: false, wallpaperCustom: false, wallpaperDarkness: 0.35,
-  showQuantities: true, unitMode: 'original', storeId: null, view3d: false, themeUpdates: true, themesToken: '', serverUrl: '', token: '', cfAccessId: '', cfAccessSecret: '',
+  showQuantities: true, unitMode: 'original', storeId: null, view3d: false, listNotifications: false, themeUpdates: true, themesToken: '', serverUrl: '', token: '', cfAccessId: '', cfAccessSecret: '',
 };
 
 const KEY = 'turbopantry.settings';

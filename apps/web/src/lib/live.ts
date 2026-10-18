@@ -11,7 +11,9 @@ export type Topic = 'items' | 'list' | 'recipes' | 'stores' | 'layouts';
  */
 const subs = new Map<Topic, Set<() => void>>();
 const notify = (t: Topic) => subs.get(t)?.forEach((fn) => fn());
-const notifyAll = () => (['items', 'list', 'recipes', 'stores', 'layouts'] as Topic[]).forEach(notify);
+/** Who made the last change to a topic, as the server reported it (null: unknown, e.g. after a reconnect). */
+export const lastChange: { by: string | null } = { by: null };
+const notifyAll = () => { lastChange.by = null; (['items', 'list', 'recipes', 'stores', 'layouts'] as Topic[]).forEach(notify); };
 
 export function subscribe(topic: Topic, fn: () => void): () => void {
   let set = subs.get(topic);
@@ -31,7 +33,7 @@ export function useLiveConnection() {
     const open = () => {
       es = new HeaderEventSource(url, headers);
       es.onopen = () => { tries = 0; if (wasUp) notifyAll(); wasUp = true; };
-      for (const t of ['items', 'list', 'recipes', 'stores', 'layouts'] as Topic[]) es.addEventListener(t, () => notify(t));
+      for (const t of ['items', 'list', 'recipes', 'stores', 'layouts'] as Topic[]) es.addEventListener(t, (ev) => { try { lastChange.by = (JSON.parse(ev.data) as { by?: string }).by ?? null; } catch { lastChange.by = null; } notify(t); });
       es.onerror = () => { if (stopped) return; timer = window.setTimeout(open, Math.min(30_000, 1000 * 2 ** Math.min(tries++, 5))); };
     };
     open();
