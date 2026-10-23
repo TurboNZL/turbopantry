@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { SlidersHorizontal, Trash2 } from 'lucide-react';
 import { COUNT_MODE_LABELS, COUNT_MODES, defaultsForUnit, titleCase, type CountMode, type Item } from '@turbopantry/shared';
 import { Segmented } from './Segmented.tsx';
+import { Select } from './Select.tsx';
 import { Sheet } from './Sheet.tsx';
 import { Stepper } from './Stepper.tsx';
 import { useApi } from '../lib/useApi.ts';
@@ -31,6 +32,7 @@ export function ItemSheet({ item, onClose, onSaved }: { item: Item; onClose(): v
   const [unit, setUnit] = useState(item.unit);
   const [step, setStep] = useState(item.step);
   const [defaultQty, setDefaultQty] = useState(item.defaultQty);
+  const [essential, setEssential] = useState(item.essential);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -39,7 +41,7 @@ export function ItemSheet({ item, onClose, onSaved }: { item: Item; onClose(): v
     setBusy(true); setError(null);
     try {
       const renamed = name.trim() !== titleCase(item.name); // an untouched name keeps its real capitalisation
-      await api.updateItem(item.id, { ...(renamed ? { name: name.trim() } : {}), mode, unit, step, defaultQty });
+      await api.updateItem(item.id, { ...(renamed ? { name: name.trim() } : {}), mode, unit, step, defaultQty, essential });
       onSaved(); onClose();
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
@@ -57,8 +59,10 @@ export function ItemSheet({ item, onClose, onSaved }: { item: Item; onClose(): v
       <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-sm font-medium">Usual amount to buy</span>
         <span className="flex items-center gap-1">
           <Stepper compact label="usual amount" value={defaultQty} step={step} unit={null} onChange={setDefaultQty} />
-          <select className="input h-10 !w-auto !py-0 text-sm" aria-label="Measured in" value={unit ?? ''} onChange={(e) => setUnit(e.target.value || null)}>{(mode === 'amount' ? COUNT_UNIT_OPTIONS : WEIGHT_UNIT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+          <Select className="h-10 min-w-[7rem] !py-0 text-sm" aria-label="Measured in" value={unit ?? ''} onChange={(v) => setUnit(v || null)} options={(mode === 'amount' ? COUNT_UNIT_OPTIONS : WEIGHT_UNIT_OPTIONS).map(([value, label]) => ({ value, label }))} />
         </span></div>
+      <label className="flex min-h-[2.75rem] cursor-pointer items-start gap-3"><input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0" checked={essential} onChange={(e) => setEssential(e.target.checked)} />
+        <span><span className="block text-sm font-medium">Can't run out</span><span className="block text-xs text-muted">When it is out, or at or below “keep at least”, it goes on the shopping list by itself.</span></span></label>
       <p className="text-sm"><Link to={`/settings?tab=items&item=${item.id}`} onClick={onClose} className="inline-flex min-h-[2.75rem] items-center gap-2 text-accent underline-offset-2 hover:underline"><SlidersHorizontal size={16} />More settings: keep at least, aliases, shop group…</Link></p>
     </Sheet>
   );

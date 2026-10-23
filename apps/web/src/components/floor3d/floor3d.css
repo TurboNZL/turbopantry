@@ -39,7 +39,7 @@
 .f3-label { position: absolute; display: inline-flex; align-items: center; gap: 3px; max-width: 200px; white-space: nowrap; transform: translate(-50%, -100%);
   left: calc(var(--f3-px) + var(--f3-z) * (var(--bx) * cos(var(--f3-yaw)) - var(--by) * sin(var(--f3-yaw))) * 1px);
   top: calc(var(--f3-py) + var(--f3-z) * ((var(--bx) * sin(var(--f3-yaw)) + var(--by) * cos(var(--f3-yaw))) * cos(var(--f3-pitch)) - var(--bz) * sin(var(--f3-pitch))) * 1px);
-  font-size: 14px; line-height: 1.1; font-weight: 700; padding: 4px 9px; border-radius: 999px; color: #111; background: rgb(255 255 255 / .92); box-shadow: 0 1px 3px rgb(0 0 0 / .35); }
+  pointer-events: auto; cursor: pointer; font-size: 14px; line-height: 1.1; font-weight: 700; padding: 4px 9px; border-radius: 999px; color: #111; background: rgb(255 255 255 / .92); box-shadow: 0 1px 3px rgb(0 0 0 / .35); }
 .f3-label[data-sel] { box-shadow: 0 0 0 2px hsl(var(--accent)), 0 1px 3px rgb(0 0 0 / .35); z-index: 1; }
 .f3-label b { display: inline-flex; min-width: 20px; height: 20px; padding: 0 5px; align-items: center; justify-content: center; border-radius: 999px; font-size: 12px; font-weight: 700; color: #fff; background: #d97706; }
 .f3-label b.ok { background: #64748b; }

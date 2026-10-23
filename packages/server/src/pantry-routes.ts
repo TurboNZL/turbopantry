@@ -4,7 +4,7 @@ import type { Db, User } from './db.ts';
 import type { Hub } from './events.ts';
 import { HttpError, json, readJson } from './http.ts';
 import { adjustStock, createItem, deleteItem, dismissPair, duplicateItems, getItem, ItemError, listItems, mergeItems, updateItem, validateItem } from './items.ts';
-import { addRecipeShortfall, addToList, clearChecked, deleteEntry, listEntries, updateEntry, type AddInput, type EntryPatch } from './list.ts';
+import { addRecipeShortfall, addToList, clearChecked, deleteEntry, listEntries, topUpEssentials, updateEntry, type AddInput, type EntryPatch } from './list.ts';
 import { getRecipe } from './recipes.ts';
 
 const bad = (res: ServerResponse, msg: string, status = 400) => json(res, status, { error: msg });
@@ -57,7 +57,8 @@ async function route(path: string, m: string, req: IncomingMessage, res: ServerR
       const addAlias = isObj(body) && typeof body.addAlias === 'string' ? body.addAlias.trim().slice(0, 150) : undefined;
       const saved = updateItem(db, id, { ...v, ...(addAlias ? { addAlias } : {}) });
       if (!saved) { bad(res, 'No such item', 404); return true; }
-      hub.send('items', user.name); json(res, 200, saved); return true;
+      const topped = topUpEssentials(db, user.name);
+      hub.send('items', user.name); if (topped) hub.send('list', user.name); json(res, 200, getItem(db, id) ?? saved); return true;
     }
     if (m === 'DELETE') {
       if (!deleteItem(db, id)) { bad(res, 'No such item', 404); return true; }
@@ -74,8 +75,10 @@ async function route(path: string, m: string, req: IncomingMessage, res: ServerR
     if (changes.some((c) => !c)) { bad(res, 'Each change needs an itemId and a number delta.'); return true; }
     const reason = typeof body.reason === 'string' && /^[a-z ]{1,20}$/.test(body.reason) ? body.reason : 'manual';
     const recipeId = Number.isInteger(body.recipeId) ? (body.recipeId as number) : null;
-    json(res, 200, adjustStock(db, changes as { itemId: number; delta: number }[], reason, user.name, recipeId));
-    hub.send('items', user.name);
+    const result = adjustStock(db, changes as { itemId: number; delta: number }[], reason, user.name, recipeId);
+    const topped = topUpEssentials(db, user.name); // things you can't run out of go straight on the list
+    json(res, 200, result);
+    hub.send('items', user.name); if (topped) hub.send('list', user.name);
     return true;
   }
 

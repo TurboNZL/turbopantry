@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Eye, EyeOff, Trash2, X } from 'lucide-react';
 import { GROUP_SECTIONS, PLACES, formatStock, searchItems, titleCase, type CountMode, type Item } from '@turbopantry/shared';
 import { Segmented } from './Segmented.tsx';
+import { Select } from './Select.tsx';
 import { Stepper } from './Stepper.tsx';
 import { COUNT_UNIT_OPTIONS, MODE_OPTIONS, WEIGHT_UNIT_OPTIONS, patchForMode } from './ItemSheet.tsx';
 import { useItems } from '../lib/data.ts';
@@ -20,7 +21,7 @@ function ItemEditor({ item, onSaved, onGone }: { item: Item; onSaved(): void; on
   const api = useApi();
   const [real, setReal] = useState(false);
   const [name, setName] = useState(titleCase(item.name));
-  const [d, setD] = useState({ mode: item.mode, unit: item.unit, step: item.step, defaultQty: item.defaultQty, minQty: item.minQty, category: item.category, place: item.place ?? '', gpc: item.gramsPerCup ? String(item.gramsPerCup) : '' });
+  const [d, setD] = useState({ mode: item.mode, unit: item.unit, step: item.step, defaultQty: item.defaultQty, minQty: item.minQty, category: item.category, place: item.place ?? '', essential: item.essential, gpc: item.gramsPerCup ? String(item.gramsPerCup) : '' });
   const [aliases, setAliases] = useState(item.aliases);
   const [alias, setAlias] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +35,7 @@ function ItemEditor({ item, onSaved, onGone }: { item: Item; onSaved(): void; on
     const shown = real ? item.name : titleCase(item.name);
     try {
       await api.updateItem(item.id, {
-        ...(name.trim() !== shown ? { name: name.trim() } : {}), mode: d.mode, unit: d.unit, step: d.step, defaultQty: d.defaultQty, minQty: d.minQty, category: d.category, place: (d.place || null) as Item['place'],
+        ...(name.trim() !== shown ? { name: name.trim() } : {}), mode: d.mode, unit: d.unit, step: d.step, defaultQty: d.defaultQty, minQty: d.minQty, category: d.category, essential: d.essential, place: (d.place || null) as Item['place'],
         aliases: extra, gramsPerCup: Number(d.gpc) > 0 ? Number(d.gpc) : null,
       });
       setAlias(''); toast('Saved'); onSaved();
@@ -55,17 +56,19 @@ function ItemEditor({ item, onSaved, onGone }: { item: Item; onSaved(): void; on
       <div><span className={lab}>How is it counted?</span>
         <Segmented label="How it is counted" value={d.mode} options={MODE_OPTIONS} onChange={(m: CountMode) => setD((x) => ({ ...x, ...patchForMode({ unit: x.unit }, m) }))} /></div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block"><span className={lab}>Unit</span>
-          <select className={field} value={d.unit ?? ''} onChange={(e) => set('unit', e.target.value || null)}>{(d.mode === 'amount' ? COUNT_UNITS : WEIGHT_UNITS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
-        <label className="block"><span className={lab}>Shop group</span>
-          <select className={field} value={d.category} onChange={(e) => set('category', e.target.value)}>{GROUP_SECTIONS.map((s) => <optgroup key={s.section} label={s.section}>{s.groups.map((g) => <option key={g}>{g}</option>)}</optgroup>)}</select></label>
+        <div className="block"><span className={lab}>Unit</span>
+          <Select className={`${field} w-full`} aria-label="Unit" value={d.unit ?? ''} onChange={(v) => set('unit', v || null)} options={(d.mode === 'amount' ? COUNT_UNITS : WEIGHT_UNITS).map(([value, label]) => ({ value, label }))} /></div>
+        <div className="block"><span className={lab}>Shop group</span>
+          <Select className={`${field} w-full`} aria-label="Shop group" value={d.category} onChange={(v) => set('category', v)} options={GROUP_SECTIONS.flatMap((s) => s.groups.map((g) => ({ value: g, label: g, group: s.section })))} /></div>
       </div>
+      <label className="flex min-h-[2.75rem] cursor-pointer items-start gap-3"><input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0" checked={d.essential} onChange={(e) => set('essential', e.target.checked)} />
+        <span><span className="block text-sm font-medium">Can't run out</span><span className="block text-xs text-muted">When it is out, or at or below “keep at least”, it goes on the shopping list by itself.</span></span></label>
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">{d.mode === 'chunks' ? 'One chunk is' : 'Each tap changes it by'}</span><Stepper label="step" value={d.step} step={d.unit === 'g' || d.unit === 'ml' ? 25 : d.unit === 'kg' || d.unit === 'l' ? 0.25 : 1} unit={d.unit} min={0.001} onChange={(v) => set('step', v)} /></div>
         <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">Add this much by default</span><Stepper label="default amount" value={d.defaultQty} step={d.step} unit={d.unit} onChange={(v) => set('defaultQty', v)} /></div>
         <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">Keep at least <span className="font-normal text-muted">(0 = don't watch)</span></span><Stepper label="minimum" value={d.minQty} step={d.step} unit={d.unit} onChange={(v) => set('minQty', v)} /></div>
       </div>
-      <label className="block"><span className={lab}>Kept in</span><select className={field} value={d.place} onChange={(e) => set('place', e.target.value)}><option value="">Not set</option>{PLACES.map((p) => <option key={p}>{p}</option>)}</select></label>
+      <div className="block"><span className={lab}>Kept in</span><Select className={`${field} w-full`} aria-label="Kept in" value={d.place} onChange={(v) => set('place', v)} options={[{ value: '', label: 'Not set' }, ...PLACES.map((x) => ({ value: x, label: titleCase(x) }))]} /></div>
       <div><span className={lab}>Also written as</span>
         <p className="mb-2 text-sm text-muted">Recipes that use these words are linked to this item.</p>
         <div className="flex flex-wrap gap-2">{aliases.map((a) => <span key={a} className="chip inline-flex items-center gap-1 !py-1.5">{a}<button type="button" aria-label={`Remove ${a}`} onClick={() => setAliases(aliases.filter((x) => x !== a))}><X size={14} /></button></span>)}</div>

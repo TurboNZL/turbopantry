@@ -29,7 +29,7 @@ const Labels = memo(function Labels({ blocks, size, selectedId, editable, info }
         if (!b.label && i?.badge === undefined) return null;
         const style = { '--bx': ((b.x + f.w / 2) * CELL - (size * CELL) / 2), '--by': ((b.y + f.d / 2) * CELL - (size * CELL) / 2), '--bz': ((b.z ?? 0) + b.h) * STEP_H + 4 } as CSSProperties;
         return (
-          <span key={b.id} className="f3-label" data-sel={sel || undefined} style={style}>
+          <span key={b.id} className="f3-label" data-bid={b.id} data-sel={sel || undefined} style={style}>
             {i?.badge !== undefined && i.tone === 'walk' && <b className="walk">{i.badge}</b>}
             <span className="t">{titleCase(b.label)}</span>
             {i?.badge !== undefined && i.tone !== 'walk' && <b className={i.tone === 'warn' ? '' : 'ok'}>{i.badge}</b>}
@@ -42,7 +42,7 @@ const Labels = memo(function Labels({ blocks, size, selectedId, editable, info }
 
 type Gesture =
   | { mode: 'pinch'; dist: number; zoom: number }
-  | { mode: 'block'; id: string; sx: number; sy: number; bx: number; by: number; moved: boolean; editable: boolean }
+  | { mode: 'block'; id: string; sx: number; sy: number; bx: number; by: number; moved: boolean; editable: boolean; /** every block under the finger, front to back */ stack: string[]; /** it was already the selected one */ was: boolean }
   | { mode: 'pan' | 'orbit'; lx: number; ly: number; moved: boolean };
 
 /**
@@ -50,11 +50,13 @@ type Gesture =
  * with snapping and no overlaps); one finger on the empty floor pans or turns the view (the Move/Turn switch); two fingers pinch to zoom.
  * The mouse wheel zooms, shift or right-drag turns. Arrow keys pan the view (the editor claims them for the selected block through `onKey`).
  */
-export function Scene3D({ cam, size, blocks, selectedId, editable = false, info, onTap, onDragStart, onMove, onDragEnd, onKey, label = 'Floor plan', compact = false, children }: {
+export function Scene3D({ cam, size, blocks, selectedId, editable = false, info, onTap, onDragStart, onMove, onDragEnd, onKey, onFloorTap, label = 'Floor plan', compact = false, children }: {
   cam: CameraApi; size: number; blocks: Block[]; selectedId?: string | null; editable?: boolean; info?: Map<string, BlockInfo>;
   onTap?(id: string | null): void; onDragStart?(id: string): void; onMove?(id: string, x: number, y: number): void; onDragEnd?(): void;
   /** Return true when the key was used. */
-  onKey?(e: React.KeyboardEvent): boolean; label?: string; compact?: boolean; children?: ReactNode;
+  onKey?(e: React.KeyboardEvent): boolean;
+  /** A tap anywhere (block or floor) reports the spot instead of picking a block, in pixels from the floor's centre. For a straight-down overview. */
+  onFloorTap?(cx: number, cy: number): void; label?: string; compact?: boolean; children?: ReactNode;
 }) {
   const vp = useRef<HTMLDivElement>(null);
   const blocksRef = useRef(blocks); blocksRef.current = blocks;
@@ -109,10 +111,16 @@ export function Scene3D({ cam, size, blocks, selectedId, editable = false, info,
       return;
     }
     const hit = (e.target as HTMLElement).closest<HTMLElement>('[data-bid]');
-    const id = hit?.dataset.bid;
+    const isLabel = !!hit?.classList.contains('f3-label'); // a name tag always means its own block, however much is stacked around it
+    // every block under the finger, front to back: where blocks overlap on screen the one in front is not always the one meant
+    const stack = [...new Set(document.elementsFromPoint(e.clientX, e.clientY).filter((n) => !n.classList.contains('f3-label')).map((n) => (n as HTMLElement).closest<HTMLElement>('.f3-block')?.dataset.bid).filter((v): v is string => !!v))];
+    let id = hit?.dataset.bid;
+    const was = !!id && id === selectedId;
+    // tapping the selected block again picks the next one behind it, so a stack can be walked through
+    if (id && !isLabel && !editable && stack.length > 1 && stack[0] === selectedId) id = stack[1];
     const blk = id ? blocksRef.current.find((b) => b.id === id) : undefined;
     if (blk) {
-      g.current = { mode: 'block', id: blk.id, sx: e.clientX, sy: e.clientY, bx: blk.x, by: blk.y, moved: false, editable };
+      g.current = { mode: 'block', id: blk.id, sx: e.clientX, sy: e.clientY, bx: blk.x, by: blk.y, moved: false, editable, stack: isLabel ? [blk.id] : stack, was: was && !isLabel };
       if (editable) onTap?.(blk.id);
     } else {
       const orbit = e.shiftKey || e.button === 2 || e.button === 1 || cam.drag === 'orbit';
@@ -155,10 +163,23 @@ export function Scene3D({ cam, size, blocks, selectedId, editable = false, info,
     g.current = null; setGesturing(false);
     if (!s || s.mode === 'pinch') return;
     // a tap that opens a sheet is reported from the click that follows (opening it on pointer-up would put the sheet under that click and close it again)
-    if (s.mode === 'block') { if (s.moved && s.editable) onDragEnd?.(); else if (!s.moved && !editable) tap.current = s.id; }
+    if (s.mode === 'block') {
+      if (s.moved && s.editable) onDragEnd?.();
+      else if (!s.moved && !editable) tap.current = s.id;
+      else if (!s.moved && editable && s.was && s.stack.length > 1) onTap?.(s.stack[(s.stack.indexOf(s.id) + 1) % s.stack.length]!); // a second tap on the selected block picks the one behind it
+    }
     else if (!s.moved) { if (editable) onTap?.(null); else tap.current = null; }
   };
-  const click = () => { const t = tap.current; tap.current = undefined; if (t !== undefined) onTap?.(t); };
+  const click = (e: React.MouseEvent) => {
+    const t = tap.current; tap.current = undefined;
+    if (t === undefined) return;
+    if (onFloorTap && vp.current) {
+      const r = vp.current.getBoundingClientRect(), k = cam.ref.current;
+      const f = screenToFloor(k, e.clientX - r.left - r.width / 2 - k.px, e.clientY - r.top - r.height / 2 - k.py);
+      onFloorTap(f.x * CELL, f.y * CELL); return;
+    }
+    onTap?.(t);
+  };
 
   const keys = (e: React.KeyboardEvent) => {
     if (onKey?.(e)) { e.preventDefault(); return; }

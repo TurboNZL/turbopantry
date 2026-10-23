@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, PackageX, Plus, ShoppingCart, SlidersHorizontal, Trash2, Pencil } from 'lucide-react';
+import { AlertTriangle, Pin, PackageX, Plus, ShoppingCart, SlidersHorizontal, Trash2, Pencil } from 'lucide-react';
 import { GROUPS, parseQuickAdd, searchItems, titleCase, type Item } from '@turbopantry/shared';
 import { ItemSheet } from '../components/ItemSheet.tsx';
 import { LoadError } from '../components/SignInNotice.tsx';
@@ -30,7 +30,7 @@ function Row({ it, undoing, onOpen, onChange, onOut, onUndo, onExpire, onList, o
   return (
     <div {...menu} id={`item-${it.id}`} className={`flex h-11 items-center gap-0.5 pl-3 pr-1 ${highlight ? 'bt-flash' : ''}`}>
       <button className="min-w-0 flex-1 truncate py-2 text-left text-[15px]" onClick={onOpen} aria-label={`${titleCase(it.name)} settings`}>
-        <span className={out ? 'text-muted' : 'font-medium'}>{titleCase(it.name)}</span>
+        <span className={out ? 'text-muted' : 'font-medium'}>{titleCase(it.name)}</span>{it.essential && <Pin size={12} className="ml-1 inline text-accent" aria-label="Can't run out" />}
         {(low || it.place) && <span className="ml-1.5 text-xs text-muted">{[low && !out && 'running low', it.place].filter(Boolean).join(' · ')}</span>}
       </button>
       <Stepper compact label={titleCase(it.name)} value={it.qty} step={it.step} unit={it.unit} onChange={onChange} />

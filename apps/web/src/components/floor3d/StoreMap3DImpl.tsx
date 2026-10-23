@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Footprints, Pencil } from 'lucide-react';
+import { Footprints, LocateFixed, Pencil, Rotate3d } from 'lucide-react';
 import { FLOOR, formatStock, titleCase, walkOrder, type ListEntry } from '@turbopantry/shared';
 import { useLayout } from '../../lib/useLayout.ts';
 import { useApi } from '../../lib/useApi.ts';
@@ -15,7 +15,7 @@ import type { StoreMap3DProps } from './types.ts';
 export function StoreMap3DImpl({ store, entries, items }: StoreMap3DProps) {
   const api = useApi();
   const { layout, loaded, save } = useLayout('store', store.id);
-  const cam = useCamera();
+  const cam = useCamera(true); // starts straight down: tap where you are to come in close
   const [editing, setEditing] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
@@ -65,10 +65,12 @@ export function StoreMap3DImpl({ store, entries, items }: StoreMap3DProps) {
       <div className="flex flex-wrap items-center gap-2">
         <button className="btn flex h-11 items-center gap-1.5 px-3" onClick={() => setEditing(true)}><Pencil size={16} />Edit map</button>
         {walking && <button className="btn flex h-11 items-center gap-1.5 px-3" onClick={() => void useOrder()}><Footprints size={16} />Use this walking order</button>}
+        {!cam.top && <button className="btn flex h-11 items-center gap-1.5 px-3" onClick={() => { setOpenId(null); cam.overview(); }}><LocateFixed size={16} />Top down</button>}
       </div>
-      <Scene3D cam={cam} size={FLOOR.store} blocks={layout.blocks} selectedId={openId} info={info} label={`${store.name} map`} onTap={(id) => { const b = layout.blocks.find((x) => x.id === id); setOpenId(b ? b.id : null); }} />
+      {cam.top && <p className="flex items-center justify-center gap-2 rounded-theme bg-accent/15 px-3 py-2 text-center text-sm font-medium" role="status"><Rotate3d size={16} aria-hidden />Tap where you are in the store to look around from there.</p>}
+      <Scene3D cam={cam} size={FLOOR.store} blocks={layout.blocks} selectedId={openId} info={info} label={`${store.name} map`} onFloorTap={cam.top ? (x, y) => cam.closeUp(x, y) : undefined} onTap={(id) => { const b = layout.blocks.find((x) => x.id === id); setOpenId(b ? b.id : null); }} />
       <CameraPad cam={cam} />
-      <p className="text-center text-xs text-muted">{walking ? 'Blue numbers are the order you walk. ' : ''}Orange numbers are things on your list in that part of the shop.</p>
+      <p className="text-center text-xs text-muted">Tap a name tag to pick a block, and tap a picked block again to pick the one behind it. {walking ? 'Blue numbers are the order you walk. ' : ''}Orange numbers are things on your list in that part of the shop.</p>
       {rest.length > 0 && <p className="text-center text-xs text-muted">{rest.length} {rest.length === 1 ? 'line' : 'lines'} on your list {rest.length === 1 ? 'is' : 'are'} in a group that no part of this map claims.</p>}
 
       {open && (

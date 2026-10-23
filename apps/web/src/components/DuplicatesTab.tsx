@@ -18,7 +18,7 @@ function Side({ it, picked, onPick }: { it: Item; picked: boolean; onPick(): voi
   );
 }
 
-/** Settings > Duplicates: items that might be the same thing. Merging keeps one, adds the stock together and re-points the list, recipes and history. Nothing is merged by itself. */
+/** Settings > Duplicates: items that might be the same thing. Merging keeps one, adds the stock together, re-points the list, recipes and history, and keeps the other's name as an alias. Nothing is merged by itself. */
 export function DuplicatesTab() {
   const api = useApi();
   const [pairs, setPairs] = useState<Pair[] | null>(null);
@@ -31,9 +31,9 @@ export function DuplicatesTab() {
 
   async function merge(p: Pair) {
     const keepId = keep[key(p)] ?? p.a.id, from = keepId === p.a.id ? p.b : p.a, into = keepId === p.a.id ? p.a : p.b;
-    if (!window.confirm(`Merge “${titleCase(from.name)}” into “${titleCase(into.name)}”? Their stock is added together and the list and recipes point at “${titleCase(into.name)}”.`)) return;
+    if (!window.confirm(`Merge “${titleCase(from.name)}” into “${titleCase(into.name)}”? Their stock is added together, the list and recipes point at “${titleCase(into.name)}”, and “${titleCase(from.name)}” is kept as another name for it, so it is still found by that name.`)) return;
     setBusy(true);
-    try { await api.mergeItems(from.id, into.id); toast(`Merged into ${titleCase(into.name)}`); load(); } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+    try { await api.mergeItems(from.id, into.id); toast(`Merged into ${titleCase(into.name)} · “${titleCase(from.name)}” is now another name for it`); load(); } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   }
   async function different(p: Pair) { try { await api.dismissDuplicate(p.a.id, p.b.id); setPairs((cur) => (cur ?? []).filter((x) => x !== p)); } catch (e) { toast((e as Error).message); } }
 

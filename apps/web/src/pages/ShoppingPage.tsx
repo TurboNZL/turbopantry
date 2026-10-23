@@ -12,6 +12,7 @@ import { useStore } from '../lib/store.ts';
 import { toast } from '../lib/toast.ts';
 import { useApi } from '../lib/useApi.ts';
 import { Segmented } from '../components/Segmented.tsx';
+import { Select } from '../components/Select.tsx';
 import { cn } from '../lib/cn.ts';
 
 const LEAVE_MS = 340; // how long a crossed-off line shows its tick before it folds away
@@ -147,11 +148,11 @@ export function ShoppingPage() {
         <div className="flex items-center gap-2">
           {stores.length > 0 && <Segmented<'list' | 'map'> label="Shopping view" value={show} onChange={pickShow} options={[{ value: 'list', label: 'List' }, { value: 'map', label: 'Store' }]} />}
           {stores.length > 0 && <label className="flex items-center gap-1.5 text-sm"><StoreIcon size={16} className="text-muted" aria-hidden /><span className="sr-only">Store</span>
-            <select className="input h-9 !py-0" aria-label="Store" value={settings.storeId ?? ''} onChange={(e) => updateSettings({ storeId: e.target.value ? Number(e.target.value) : null })}><option value="">Standard order</option>{stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>}
+            <Select className="h-9 w-32 min-w-0 !py-0" aria-label="Store" value={settings.storeId ? String(settings.storeId) : ''} onChange={(v) => updateSettings({ storeId: v ? Number(v) : null })} options={[{ value: '', label: 'Standard order' }, ...stores.map((s) => ({ value: String(s.id), label: s.name }))]} /></label>}
         </div>
       </div>
       {map ? (
-        !settings.view3d ? <div className="card space-y-2 p-5 text-center"><p className="font-medium">The store view is a 3D map</p><p className="text-sm text-muted">Turn on 3D views to see what to grab in each part of the shop.</p><button className="btn btn-accent h-11 px-4" onClick={() => updateSettings({ view3d: true })}>Turn on 3D views</button></div>
+        !settings.listMap3d ? <div className="card space-y-2 p-5 text-center"><p className="font-medium">The store view is a 3D map</p><p className="text-sm text-muted">Turn on the shop map to see what to grab in each part of the shop.</p><button className="btn btn-accent h-11 px-4" onClick={() => updateSettings({ listMap3d: true })}>Turn on the shop map</button></div>
         : !store ? <div className="card p-5 text-center text-sm text-muted">Pick a store above to see its map.</div>
         : <StoreMap3D store={store} entries={entries} items={items} />
       ) : <>

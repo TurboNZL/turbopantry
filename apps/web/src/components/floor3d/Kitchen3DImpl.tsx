@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { MapPinOff, Pencil, PackageX, Plus, Search, ShoppingCart, Sofa } from 'lucide-react';
-import { placeOf, searchItems, starterKitchen, titleCase, FLOOR, type Block, type Item } from '@turbopantry/shared';
+import { placeOf, searchItems, starterKitchen, titleCase, FLOOR, type Block, type Item, type Layout } from '@turbopantry/shared';
 import { useLayout } from '../../lib/useLayout.ts';
 import { useApi } from '../../lib/useApi.ts';
 import { toast } from '../../lib/toast.ts';
 import { cn } from '../../lib/cn.ts';
 import { Sheet } from '../Sheet.tsx';
+import { Select } from '../Select.tsx';
 import { Stepper } from '../Stepper.tsx';
 import { CameraPad } from './CameraPad.tsx';
 import { useCamera } from './camera.ts';
@@ -51,12 +52,25 @@ export function Kitchen3DImpl({ items, onChange, onOut, onList }: Kitchen3DProps
   const places = useMemo(() => layout.blocks.filter((b) => placeOf(b)).map((b) => ({ id: b.id, name: placeOf(b)! })), [layout.blocks]);
   const open = layout.blocks.find((b) => b.id === openId) ?? null;
 
+  /** Saves the plan, and when a block was renamed the things kept in it move to the new name (a place IS its name). A cleared name moves nothing, so retyping one cannot lose them. */
+  async function saveRenaming(next: Layout) {
+    const before = layout;
+    void save(next);
+    const taken = new Set(next.blocks.map((b) => norm(placeOf(b))));
+    for (const nb of next.blocks) {
+      const ob = before.blocks.find((b) => b.id === nb.id);
+      const from = ob ? placeOf(ob) : null, to = placeOf(nb);
+      if (!from || !to || norm(from) === norm(to) || taken.has(norm(from))) continue; // another block still has the old name: it keeps them
+      for (const it of items.filter((i) => norm(i.place) === norm(from))) await api.updateItem(it.id, { place: to }).catch(() => undefined);
+    }
+  }
+
   async function setPlace(item: Item, place: string | null) {
     try { await api.updateItem(item.id, { place }); toast(place ? `${titleCase(item.name)} is in ${place}` : `${titleCase(item.name)} has no place now`); } catch (e) { toast((e as Error).message); }
   }
 
   if (!loaded) return <div className="card p-8 text-center text-sm text-muted" role="status">Loading the kitchen…</div>;
-  if (editing) return <LayoutEditor kind="pantry" layout={layout} cam={cam} onSave={(l) => void save(l)} onDone={() => setEditing(false)} />;
+  if (editing) return <LayoutEditor kind="pantry" layout={layout} cam={cam} onSave={(l) => void saveRenaming(l)} onDone={() => setEditing(false)} />;
 
   if (!layout.blocks.length) return (
     <div className="card space-y-3 p-6 text-center">
@@ -79,7 +93,7 @@ export function Kitchen3DImpl({ items, onChange, onOut, onList }: Kitchen3DProps
       </div>
       <Scene3D cam={cam} size={FLOOR.pantry} blocks={layout.blocks} selectedId={openId} info={info} label="Kitchen" onTap={(id) => { const b = layout.blocks.find((x) => x.id === id); setOpenId(b && placeOf(b) ? b.id : null); }} />
       <CameraPad cam={cam} />
-      <p className="text-center text-xs text-muted">Tap a place to see what is in it. Orange numbers are things that are low or out.</p>
+      <p className="text-center text-xs text-muted">Tap a place (or its name tag) to see what is in it; tap it again to pick the one behind. Orange numbers are things that are low or out.</p>
 
       {open && !adding && (
         <PlaceSheet block={open} name={placeOf(open) ?? open.label} list={byBlock.get(open.id) ?? []} onClose={() => setOpenId(null)} onChange={onChange} onOut={onOut} onList={onList}
@@ -88,12 +102,7 @@ export function Kitchen3DImpl({ items, onChange, onOut, onList }: Kitchen3DProps
       {open && adding && (
         <Sheet title={`Keep in ${placeOf(open)}`} onClose={() => setAdding(false)} footer={<button className="btn h-11 w-full" onClick={() => setAdding(false)}>Back</button>}>
           <label className="relative block"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden /><input className="input h-11 w-full pl-9" placeholder="Find an item" aria-label="Find an item" value={q} onChange={(e) => setQ(e.target.value)} autoFocus /></label>
-          <ul className="divide-y divide-line overflow-hidden rounded-theme border border-line">
-            {(q.trim() ? searchItems(tracked, q, 30) : [...tracked].sort((a, b) => Number(!!a.place) - Number(!!b.place) || a.name.localeCompare(b.name)).slice(0, 40)).filter((i) => norm(i.place) !== norm(placeOf(open))).map((it) => (
-              <li key={it.id}><button className="flex min-h-[2.75rem] w-full items-center justify-between gap-2 px-3 py-2 text-left" onClick={() => { void setPlace(it, placeOf(open)); setAdding(false); }}>
-                <span className="min-w-0 truncate">{titleCase(it.name)}</span><span className="shrink-0 text-xs text-muted">{it.place ? `now in ${it.place}` : 'no place yet'}</span></button></li>
-            ))}
-          </ul>
+          <Candidates open={open} tracked={tracked} byBlock={byBlock} q={q} onPick={(it) => { void setPlace(it, placeOf(open)); setAdding(false); }} />
         </Sheet>
       )}
       {elsewhere && (
@@ -104,14 +113,36 @@ export function Kitchen3DImpl({ items, onChange, onOut, onList }: Kitchen3DProps
             {other.map((it) => (
               <li key={it.id} className="flex items-center justify-between gap-2 px-3 py-2">
                 <span className="min-w-0"><span className="block truncate">{titleCase(it.name)}</span>{it.place && <span className="block truncate text-xs text-muted">in “{it.place}”</span>}</span>
-                <select className="input h-11 w-36 shrink-0" aria-label={`Put ${titleCase(it.name)} in`} value="" onChange={(e) => e.target.value && void setPlace(it, e.target.value)}>
-                  <option value="">Put in…</option>{places.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
-                </select>
+                <Select className="h-11 w-40 shrink-0" aria-label={`Put ${titleCase(it.name)} in`} value="" placeholder="Put in…" onChange={(v) => void setPlace(it, v)} options={places.map((p) => ({ value: p.name, label: titleCase(p.name) }))} />
               </li>
             ))}
           </ul>
         </Sheet>
       )}
+    </div>
+  );
+}
+
+/** Items that could be kept in this place: first the ones in the same category as what is already here, then the rest. */
+function Candidates({ open, tracked, byBlock, q, onPick }: { open: Block; tracked: Item[]; byBlock: Map<string, Item[]>; q: string; onPick(i: Item): void }) {
+  const here = placeOf(open);
+  const mineCats = new Set((byBlock.get(open.id) ?? []).map((i) => i.category));
+  const pool = (q.trim() ? searchItems(tracked, q, 60) : [...tracked].sort((a, b) => Number(!!a.place) - Number(!!b.place) || a.name.localeCompare(b.name))).filter((i) => norm(i.place) !== norm(here));
+  const same = q.trim() ? [] : pool.filter((i) => mineCats.has(i.category)).slice(0, 20);
+  const rest = pool.filter((i) => !same.includes(i)).slice(0, 40);
+  const row = (it: Item) => (
+    <li key={it.id}><button className="flex min-h-[2.75rem] w-full items-center justify-between gap-2 px-3 py-2 text-left" onClick={() => onPick(it)}>
+      <span className="min-w-0 truncate">{titleCase(it.name)}</span><span className="shrink-0 text-xs text-muted">{it.place ? `now in ${titleCase(it.place)}` : 'no place yet'}</span></button></li>
+  );
+  return (
+    <div className="space-y-3">
+      {same.length > 0 && (
+        <div className="space-y-1"><h3 className="text-xs font-semibold uppercase tracking-wide text-muted">In the same category</h3>
+          <p className="text-xs text-muted">Things like what is already in the {here?.toLowerCase()}.</p>
+          <ul className="divide-y divide-line overflow-hidden rounded-theme border border-line">{same.map(row)}</ul></div>
+      )}
+      <div className="space-y-1">{same.length > 0 && <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Everything else</h3>}
+        {rest.length ? <ul className="divide-y divide-line overflow-hidden rounded-theme border border-line">{rest.map(row)}</ul> : !same.length && <p className="text-sm text-muted">Nothing to move here.</p>}</div>
     </div>
   );
 }

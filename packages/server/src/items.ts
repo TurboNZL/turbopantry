@@ -3,11 +3,11 @@ import { atomically, type Db } from './db.ts';
 
 interface Row {
   id: number; name: string; key: string; aliases: string; category: string; unit: string | null; qty: number; step: number; default_qty: number; min_qty: number;
-  tracked: number; grams_per_cup: number | null; place: string | null; count_mode: string; recipe_only: number;
+  tracked: number; grams_per_cup: number | null; place: string | null; count_mode: string; recipe_only: number; essential: number;
 }
 const toItem = (r: Row): Item => ({
   id: r.id, name: r.name, aliases: JSON.parse(r.aliases) as string[], category: r.category, unit: r.unit, qty: r.qty, step: r.step, defaultQty: r.default_qty,
-  minQty: r.min_qty, mode: r.count_mode as CountMode, tracked: !!r.tracked, gramsPerCup: r.grams_per_cup, place: r.place,
+  minQty: r.min_qty, mode: r.count_mode as CountMode, tracked: !!r.tracked, gramsPerCup: r.grams_per_cup, place: r.place, essential: !!r.essential,
 });
 
 /** An item that only a recipe knows about: made by linking, never stocked (and none now). Shown in the pantry only when asked for. */
@@ -23,7 +23,7 @@ const num = (v: unknown, lo: number, hi: number): number | undefined => (typeof 
 
 export interface ItemInput {
   name?: string; aliases?: string[]; category?: string; unit?: string | null; qty?: number; step?: number; defaultQty?: number; minQty?: number;
-  mode?: CountMode; tracked?: boolean; fromRecipe?: boolean; gramsPerCup?: number | null; place?: string | null;
+  mode?: CountMode; tracked?: boolean; fromRecipe?: boolean; gramsPerCup?: number | null; place?: string | null; essential?: boolean;
 }
 
 /** Checks and cleans an item body (fields it does not mention are left out). */
@@ -41,6 +41,7 @@ export function validateItem(body: unknown): ItemInput | string {
   }
   if ('gramsPerCup' in b) { if (b.gramsPerCup === null) out.gramsPerCup = null; else { const v = num(b.gramsPerCup, 1, 2000); if (v === undefined) return 'gramsPerCup must be a number of grams.'; out.gramsPerCup = v; } }
   if ('tracked' in b) out.tracked = !!b.tracked;
+  if ('essential' in b) out.essential = !!b.essential;
   if ('fromRecipe' in b) out.fromRecipe = !!b.fromRecipe;
   return out;
 }
@@ -70,8 +71,8 @@ export function createItem(db: Db, input: ItemInput): { item: Item; existed: boo
   const d = defaultsForUnit(unit, mode);
   const qty = input.qty ?? 0, minQty = input.minQty ?? 0;
   const tracked = input.tracked ?? true; // every item is in the pantry; one made by linking a recipe says `fromRecipe` and simply starts at none (out)
-  const res = db.prepare(`INSERT INTO items (name, key, aliases, category, unit, qty, step, default_qty, min_qty, count_mode, tracked, grams_per_cup, place, from_recipe) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(input.name, key, JSON.stringify(aliases), input.category ?? guessCategory(input.name), unit, qty, input.step ?? d.step, input.defaultQty ?? d.defaultQty, minQty, mode, tracked ? 1 : 0, input.gramsPerCup ?? null, input.place ?? null, input.fromRecipe ? 1 : 0);
+  const res = db.prepare(`INSERT INTO items (name, key, aliases, category, unit, qty, step, default_qty, min_qty, count_mode, tracked, grams_per_cup, place, from_recipe, essential) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(input.name, key, JSON.stringify(aliases), input.category ?? guessCategory(input.name), unit, qty, input.step ?? d.step, input.defaultQty ?? d.defaultQty, minQty, mode, tracked ? 1 : 0, input.gramsPerCup ?? null, input.place ?? null, input.fromRecipe ? 1 : 0, input.essential ? 1 : 0);
   return { item: getItem(db, Number(res.lastInsertRowid))!, existed: false };
 }
 
@@ -83,8 +84,8 @@ export function updateItem(db: Db, id: number, input: ItemInput & { addAlias?: s
   checkAliases(db, id, name, aliases);
   const next = { ...cur, ...input, name, aliases };
   const tracked = input.tracked ?? (cur.tracked || next.qty > 0 || next.minQty > 0);
-  db.prepare(`UPDATE items SET name=?, key=?, aliases=?, category=?, unit=?, qty=?, step=?, default_qty=?, min_qty=?, count_mode=?, tracked=?, grams_per_cup=?, place=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?`)
-    .run(next.name, itemKey(next.name), JSON.stringify(aliases), next.category, next.unit, next.qty, next.step, next.defaultQty, next.minQty, next.mode, tracked ? 1 : 0, next.gramsPerCup, next.place, id);
+  db.prepare(`UPDATE items SET name=?, key=?, aliases=?, category=?, unit=?, qty=?, step=?, default_qty=?, min_qty=?, count_mode=?, tracked=?, grams_per_cup=?, place=?, essential=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?`)
+    .run(next.name, itemKey(next.name), JSON.stringify(aliases), next.category, next.unit, next.qty, next.step, next.defaultQty, next.minQty, next.mode, tracked ? 1 : 0, next.gramsPerCup, next.place, next.essential ? 1 : 0, id);
   return getItem(db, id);
 }
 

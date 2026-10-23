@@ -7,7 +7,6 @@ import { cn } from '../lib/cn.ts';
 import { clearCustomWallpaper, deviceLook, effectiveUi, getCustomImage, isUiStyle, listStyles, listThemes, resolveTheme, saveCustomWallpaper, themeStyle, themeWallpaper } from 'turbothemes';
 import { useCatalog } from '../lib/useCatalog.ts';
 import { LAYOUTS } from '../lib/layout.ts';
-import { ThemeUpdates } from './ThemeUpdates.tsx';
 
 type ThemeId = string;
 type UiStyleId = string;
@@ -220,7 +219,7 @@ export function AppearancePreview() {
 export function AppearanceLayout() {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,1fr)_21rem]">
-      <div className="min-w-0 space-y-5"><LayoutSection /><ColourThemeSection /><UiStyleSection /><ThemeUpdates /></div>
+      <div className="min-w-0 space-y-5"><LayoutSection /><ColourThemeSection /><UiStyleSection /></div>
       <AppearancePreview />
     </div>
   );
