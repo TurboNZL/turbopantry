@@ -15,6 +15,7 @@ import { useItems } from '../lib/data.ts';
 import { toast } from '../lib/toast.ts';
 import { useApi, useLoad } from '../lib/useApi.ts';
 import { useStore } from '../lib/store.ts';
+import { useEasy } from '../lib/easy.ts';
 import { cn } from '../lib/cn.ts';
 
 const mins = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`);
@@ -65,6 +66,7 @@ export function RecipePage() {
   const showQuantities = useStore((st) => st.settings.showQuantities);
   const mode = useStore((st) => st.settings.unitMode);
   const updateSettings = useStore((st) => st.updateSettings);
+  const easy = useEasy();
 
   // a recipe that does not say how many it serves still scales: as batches (½×, 1×, 2×…)
   const known = !!r?.servings;
@@ -113,6 +115,21 @@ export function RecipePage() {
           {r.sourceUrl && <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 underline"><ExternalLink size={14} />{r.sourceName ?? 'Source'}</a>}
         </div>
         {r.tags.length > 0 && <div className="flex flex-wrap gap-1.5">{r.tags.map((t) => <span key={t} className="chip">{t}</span>)}</div>}
+        {easy ? (
+          <div className="space-y-2 pt-1">
+            <div className="grid grid-cols-2 gap-2">
+              <button className="btn btn-accent easy-action" onClick={() => setFull(true)}><Maximize2 size={20} />Cook it</button>
+              <Link to={`/recipes/${r.id}/edit`} className="btn easy-action"><Pencil size={20} />Edit</Link>
+            </div>
+            <details className="text-base"><summary className="flex min-h-[3rem] cursor-pointer items-center text-muted">More</summary>
+              <div className="flex flex-wrap gap-2 pb-1">
+                <button className="btn" onClick={() => setGroupsOpen(true)}><FolderPlus size={17} />Groups</button>
+                <button className="btn" onClick={() => { setChoices(defaultChoices(r.ingredients, items)); setSheet('link'); }}><Link2 size={17} />Link items{unlinked ? ` (${unlinked})` : ''}</button>
+                <button className="btn" onClick={() => void remove(r)} disabled={deleting}><Trash2 size={17} />Delete</button>
+              </div>
+            </details>
+          </div>
+        ) : (
         <div className="flex flex-wrap gap-2 pt-1">
           <button className="btn h-11" onClick={() => setGroupsOpen(true)}><FolderPlus size={15} />Groups</button>
           <button className="btn h-11" onClick={() => setFull(true)}><Maximize2 size={15} />Full screen</button>
@@ -120,15 +137,16 @@ export function RecipePage() {
           <button className="btn h-11" onClick={() => { setChoices(defaultChoices(r.ingredients, items)); setSheet('link'); }}><Link2 size={15} />Link items{unlinked ? ` (${unlinked})` : ''}</button>
           <button className="btn h-11" onClick={() => void remove(r)} disabled={deleting}><Trash2 size={15} />Delete</button>
         </div>
+        )}
       </header>
 
       <div className="grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <section className="card space-y-3 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-semibold">Ingredients</h2>
-            <Select className="h-10 min-w-[11rem] !py-0 text-sm" aria-label="How amounts are shown" value={showQuantities ? mode : 'off'}
+            {!easy && <Select className="h-10 min-w-[11rem] !py-0 text-sm" aria-label="How amounts are shown" value={showQuantities ? mode : 'off'}
               onChange={(v) => (v === 'off' ? updateSettings({ showQuantities: false }) : updateSettings({ showQuantities: true, unitMode: v as typeof mode }))}
-              options={[...UNIT_MODES.map((m) => ({ value: m.id, label: m.label })), { value: 'off', label: 'Hide amounts' }]} />
+              options={[...UNIT_MODES.map((m) => ({ value: m.id, label: m.label })), { value: 'off', label: 'Hide amounts' }]} />}
           </div>
           {showQuantities && (
             <div className="flex items-center gap-1 text-sm" role="group" aria-label="Servings">

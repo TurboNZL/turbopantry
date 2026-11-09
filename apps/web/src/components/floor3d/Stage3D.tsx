@@ -44,10 +44,10 @@ export function Stage3D({ title, cam, onClose, panel, panelTitle = 'Places', dra
       </div>
       <div className="relative flex min-h-0 flex-1">
         <div className="relative min-w-0 flex-1">{children}
-          <p className="pointer-events-none absolute bottom-2 left-1/2 hidden -translate-x-1/2 rounded-full bg-bg/80 px-3 py-1 text-xs text-muted [@media(pointer:fine)]:block">Drag to look around · scroll to zoom · shift-drag or right-drag turns</p>
-          <p className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-bg/80 px-3 py-1 text-xs text-muted [@media(pointer:fine)]:hidden">Drag to move · pinch to zoom · twist to turn</p>
+          <p className="pointer-events-none absolute bottom-2 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-bg/80 px-3 py-1 text-xs text-muted [@media(pointer:fine)]:block">Drag to look around · scroll to zoom · shift-drag or right-drag turns</p>
+          <p className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-bg/80 px-3 py-1 text-xs text-muted [@media(pointer:fine)]:hidden">Drag · pinch to zoom · twist to turn</p>
         </div>
-        <aside className={cn('min-h-0 overflow-y-auto border-line bg-bg', 'md:static md:block md:w-80 md:shrink-0 md:border-l', drawer ? 'absolute inset-x-0 bottom-0 z-10 max-h-[60%] border-t shadow-2xl' : 'hidden')} aria-label={panelTitle}>{panel}</aside>
+        <aside className={cn('min-h-0 overflow-y-auto border-line bg-bg', 'md:static md:block md:w-80 md:shrink-0 md:border-l', drawer ? 'absolute inset-x-0 bottom-0 z-10 max-h-[45%] border-t shadow-2xl' : 'hidden')} aria-label={panelTitle}>{panel}</aside>
       </div>
     </div>
   );

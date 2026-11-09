@@ -1,0 +1,25 @@
+/*
+ * Easy mode (Settings > Appearance, off by default): the simplest version of every screen. It is an attribute on <html data-easy>; most of what it
+ * does is here, the rest is components that draw a simpler version of themselves when it is on (useEasy()). Reasons, from the guidelines it follows:
+ *  - touch targets: Material 48 dp, Apple 44 pt, WCAG 2.2 AA floor 24 px (2.5.8) and AAA 44 px (2.5.5): every control is at least 48 px, with room around it
+ *  - bigger, plainer type (about 12% up) and generous spacing, so nothing has to be squinted at or hit precisely
+ *  - fewer choices at once (Hick's law) and progressive disclosure: the advanced screens, small print and optional tools are hidden until asked for
+ *  - one obvious action per row (tap it, then pick from a few big buttons) instead of rows of small icons
+ *  - recognition over recall and undo instead of "are you sure?" dialogs (the app already undoes by toast)
+ */
+html[data-easy] { font-size: 112.5%; }
+[data-easy] :is(.btn, .chip, input.input, textarea.input, [role="tab"], .bt-menu button) { min-height: 3rem; }
+[data-easy] .btn { padding-inline: 1.15rem; font-size: 1rem; }
+[data-easy] .chip { padding-inline: 1rem; font-size: 0.95rem; }
+/* small icon buttons (steppers, bins, carts) grow to a full touch target */
+[data-easy] button:is(.h-8, .h-9, .h-10):is(.w-8, .w-9, .w-10), [data-easy] button.\!p-0:is(.h-8, .h-9, .h-10, .h-11) { min-width: 3rem; min-height: 3rem; }
+[data-easy] .bt-tab { min-height: 3.75rem; font-size: 0.8125rem; }
+[data-easy] .bt-tab svg { width: 26px; height: 26px; }
+[data-easy] .bt-nav { min-height: 3.25rem; }
+[data-easy] .bt-content { line-height: 1.5; }
+[data-easy] .easy-hide { display: none !important; }
+@media (min-width: 768px) { [data-easy] .bt-content { max-width: 44rem; } }
+[data-easy] [role="dialog"] .bt-body { font-size: 1.05rem; }
+/* the big action buttons of the easy sheets */
+.easy-action { display: flex; min-height: 3.5rem; width: 100%; align-items: center; justify-content: center; gap: 0.6rem; border-radius: var(--radius, 0.75rem); font-size: 1.05rem; font-weight: 600; }
+.easy-row { display: flex; min-height: 3.75rem; width: 100%; align-items: center; gap: 0.75rem; padding: 0.5rem 0.9rem; text-align: left; }

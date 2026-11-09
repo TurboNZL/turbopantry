@@ -8,12 +8,30 @@ import { StoreMap3D } from '../components/floor3d/index.tsx';
 import { useAddToList } from '../components/useAddToList.tsx';
 import { useRowMenu } from '../lib/contextMenu.tsx';
 import { useClicks } from '../lib/clicks.ts';
+import { EasyLineSheet } from '../components/EasySheets.tsx';
+import { useEasy } from '../lib/easy.ts';
 import { useItems, useListEntries, useStores } from '../lib/data.ts';
 import { useStore } from '../lib/store.ts';
 import { toast } from '../lib/toast.ts';
 import { useApi } from '../lib/useApi.ts';
 import { Select } from '../components/Select.tsx';
 import { cn } from '../lib/cn.ts';
+
+/** Easy mode: a big round tick on the left crosses it off; tapping the rest opens the few choices. */
+function EasyLine({ e, leaving, onBuy, onOpen }: { e: ListEntry; leaving: 'tick' | 'fold' | null; onBuy(): void; onOpen(): void }) {
+  return (
+    <div className={cn('overflow-hidden transition-[max-height,opacity] duration-300 ease-out', leaving === 'fold' ? 'max-h-0 opacity-0' : 'max-h-20 opacity-100')}>
+      <div className={cn('flex min-h-[3.75rem] items-center gap-1 pl-1 pr-3 transition-colors', leaving && 'bg-good/10')}>
+        <button className="flex h-14 w-14 shrink-0 items-center justify-center" aria-label={`Cross off ${titleCase(e.name)}`} disabled={!!leaving} onClick={onBuy}>
+          <span className={cn('flex h-8 w-8 items-center justify-center rounded-full border-2', leaving ? 'border-good bg-good text-white' : 'border-muted')}>{leaving && <Check size={18} strokeWidth={3} />}</span></button>
+        <button className="flex min-h-[3.75rem] min-w-0 flex-1 items-center justify-between gap-3 text-left" onClick={onOpen} disabled={!!leaving} aria-label={`${titleCase(e.name)}. Tap for choices`}>
+          <span className={cn('min-w-0 truncate text-lg font-medium', leaving && 'text-muted line-through')}>{titleCase(e.name)}</span>
+          {e.qty !== null && <span className="shrink-0 text-base tabular-nums text-muted">{formatStock(e.qty, e.unit)}</span>}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 const LEAVE_MS = 340; // how long a crossed-off line shows its tick before it folds away
 
@@ -87,10 +105,12 @@ export function ShoppingPage() {
   const nav = useNavigate();
   const [leaving, setLeaving] = useState<Record<number, 'tick' | 'fold'>>({});
   const toList = useAddToList(() => { reload(); reloadItems(); });
+  const easy = useEasy();
+  const [easyOpen, setEasyOpen] = useState<ListEntry | null>(null);
 
   const chosen = stores.find((s) => s.id === settings.storeId) ?? null;
   const store = chosen ?? (map ? stores[0] ?? null : null); // the map needs a store: without a chosen one it opens the first
-  const showMap = map && !!store;
+  const showMap = map && !!store && !easy;
   const order = groupOrder(store);
   const onList = useMemo(() => new Set(entries.map((e) => e.itemId).filter((x): x is number => x !== null)), [entries]);
   const text = q.trim();
@@ -149,8 +169,8 @@ export function ShoppingPage() {
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-bold md:text-2xl">Shopping</h1>
         <div className="flex items-center gap-2">
-          {stores.length > 0 && <button className="btn flex h-9 items-center gap-1.5 px-3" onClick={() => pickMap(true)}><MapIcon size={16} />3D map</button>}
-          {stores.length > 0 && <label className="flex items-center gap-1.5 text-sm"><StoreIcon size={16} className="text-muted" aria-hidden /><span className="sr-only">Store</span>
+          {stores.length > 0 && !easy && <button className="btn flex h-9 items-center gap-1.5 px-3" onClick={() => pickMap(true)}><MapIcon size={16} />3D map</button>}
+          {stores.length > 0 && !easy && <label className="flex items-center gap-1.5 text-sm"><StoreIcon size={16} className="text-muted" aria-hidden /><span className="sr-only">Store</span>
             <Select className="h-9 w-32 min-w-0 !py-0" aria-label="Store" value={settings.storeId ? String(settings.storeId) : ''} onChange={(v) => updateSettings({ storeId: v ? Number(v) : null })} options={[{ value: '', label: 'Standard order' }, ...stores.map((s) => ({ value: String(s.id), label: s.name }))]} /></label>}
         </div>
       </div>
@@ -194,12 +214,13 @@ export function ShoppingPage() {
           <section key={c} className="space-y-0.5" aria-label={c}>
             <h2 className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted">{c}</h2>
             <div className="card divide-y divide-line overflow-hidden">
-              {rows.map((e) => <Line key={e.id} e={e} canOut={!!e.itemId && (items.find((i) => i.id === e.itemId)?.qty ?? 0) > 0} leaving={leaving[e.id] ?? null} onBuy={() => cross(e)} onView={() => nav(`/pantry?item=${e.itemId}`)} onQty={(v) => void step(e, v)} onRemove={() => void remove(e)} onOut={() => void markOut(e)} />)}
+              {rows.map((e) => easy ? <EasyLine key={e.id} e={e} leaving={leaving[e.id] ?? null} onBuy={() => cross(e)} onOpen={() => setEasyOpen(e)} /> : <Line key={e.id} e={e} canOut={!!e.itemId && (items.find((i) => i.id === e.itemId)?.qty ?? 0) > 0} leaving={leaving[e.id] ?? null} onBuy={() => cross(e)} onView={() => nav(`/pantry?item=${e.itemId}`)} onQty={(v) => void step(e, v)} onRemove={() => void remove(e)} onOut={() => void markOut(e)} />)}
             </div>
           </section>
         ))}
       </>}
       </>}
+      {easyOpen && entries.find((x) => x.id === easyOpen.id) && <EasyLineSheet entry={entries.find((x) => x.id === easyOpen.id)!} canOut={false} onClose={() => setEasyOpen(null)} onQty={(v) => void step(easyOpen, v)} onBuy={() => cross(easyOpen)} onRemove={() => void remove(easyOpen)} onView={() => nav(`/pantry?item=${easyOpen.itemId}`)} />}
       {toList.node}
     </div>
   );

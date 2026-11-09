@@ -11,6 +11,8 @@ export interface DeviceSettings {
   showQuantities: boolean;
   /** Recipes: how amounts are shown. "original" as written, "metric-cups" (oz and lb become g, cups stay), "metric-grams" (and cups of flour, sugar, butter, oats become g). */
   unitMode: 'original' | 'metric-cups' | 'metric-grams';
+  /** Easy mode: the simplest screens (big controls, few choices, advanced things hidden). Off by default. */
+  easyMode: boolean;
   /** Pantry rows show where an item is kept (opt-in; the kitchen view uses places either way). */
   showPlaces: boolean;
   /** Android app only, opt-in: a notification when someone else changes the shopping list. */
@@ -29,7 +31,7 @@ export interface DeviceSettings {
 
 export const DEFAULT_SETTINGS: DeviceSettings = {
   theme: 'auto', ui: 'auto', layout: 'side', glass: 'regular', wallpaper: false, wallpaperCustom: false, wallpaperDarkness: 0.35,
-  showQuantities: true, unitMode: 'original', storeId: null, showPlaces: false, listNotifications: false, themeUpdates: true, themesToken: '', serverUrl: '', token: '', cfAccessId: '', cfAccessSecret: '',
+  showQuantities: true, unitMode: 'original', storeId: null, showPlaces: false, easyMode: false, listNotifications: false, themeUpdates: true, themesToken: '', serverUrl: '', token: '', cfAccessId: '', cfAccessSecret: '',
 };
 
 const KEY = 'turbopantry.settings';

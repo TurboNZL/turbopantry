@@ -79,7 +79,9 @@ export function Layout() {
   const tabRef = useIndicator<HTMLElement>(pathname);
   const [q, setQ] = useState('');
   const ui = useStore((s) => s.settings.ui);
-  const layout = useStore((s) => s.settings.layout);
+  const easy = useStore((s) => s.settings.easyMode);
+  const savedLayout = useStore((s) => s.settings.layout);
+  const layout = easy ? 'dock' : savedLayout;
   const topbar = layout === 'topbar', dock = layout === 'dock' || layout === 'floating-dock';
   const noSide = topbar || dock; // these layouts have no side bar at all
   // the header shows the app's full emblem mark (owner's call, 2026-10-18), not the favicon symbol

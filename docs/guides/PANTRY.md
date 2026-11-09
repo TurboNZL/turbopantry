@@ -47,3 +47,14 @@ A cup is the 250 ml metric cup and a tablespoon is 15 ml (New Zealand and Austra
 
 ## Several phones
 Everyone signed in sees the same pantry, list and recipes, live. If a phone loses signal, it keeps showing what it last had and catches up when it is back.
+
+## Looking around in 3D
+**Pantry → 3D kitchen** and **Shopping → 3D map** open a full-screen 3D view. It is not a setting: it lasts until you close the tab, and the ✕ takes you back to the list. On a computer, drag to look around, scroll to zoom, shift-drag or right-drag to turn (the two icons at the top switch what a plain drag does). On a phone, drag to move, pinch to zoom, twist two fingers to turn. The panel beside it (a drawer under the **Places** / **Areas** button on a phone) lists every place; tap one to zoom in on it and use the same buttons as the pantry list on what is kept there.
+
+You build the plans in **Settings**: **Kitchen** (blocks, which become places once named, and walls) and **Stores → Draw the shop** (drag across the grid to mark out an area, then choose its shopping groups and its stop on your walk; *Snap to edges* puts corners on the grid or on a neighbouring area's side).
+
+## Timers and highlights
+In a recipe's method, ingredients are highlighted, and every time (“20 minutes”, “1 hour 30 minutes”) is a button that starts a countdown. Timers sit at the top of the page, keep running while you go to other pages, and ring (sound, buzz and a message) when done; they can be paused, extended a minute, or stopped.
+
+## Double-click and easy mode
+With a mouse, **double-click** a pantry item to add it to the list, and double-click a shopping line to open it in the pantry. **Settings → Appearance → Easy mode** is the simplest version of the app: bigger text and buttons, one row per item (tap it for a few big choices), the bottom bar everywhere, and the advanced screens tucked away.

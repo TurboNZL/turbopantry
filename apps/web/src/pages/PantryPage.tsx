@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Pin, PackageX, Plus, ShoppingCart, SlidersHorizontal, Trash2, Pencil } from 'lucide-react';
-import { GROUPS, parseQuickAdd, searchItems, titleCase, type Item } from '@turbopantry/shared';
+import { GROUPS, formatStock, parseQuickAdd, searchItems, titleCase, type Item } from '@turbopantry/shared';
 import { ItemSheet } from '../components/ItemSheet.tsx';
+import { EasyItemSheet } from '../components/EasySheets.tsx';
+import { useEasy } from '../lib/easy.ts';
 import { LoadError } from '../components/SignInNotice.tsx';
 import { Stepper } from '../components/Stepper.tsx';
 import { UndoButton } from '../components/UndoButton.tsx';
@@ -46,6 +48,18 @@ function Row({ it, undoing, placeOn, onOpen, onChange, onOut, onUndo, onExpire, 
   );
 }
 
+/** Easy mode: one big row per item (name, how much), tap it for the few things you can do. */
+function EasyRow({ it, onOpen }: { it: Item; onOpen(): void }) {
+  const out = it.qty <= 0, low = !out && it.minQty > 0 && it.qty <= it.minQty;
+  return (
+    <button className="easy-row" onClick={onOpen} aria-label={`${titleCase(it.name)}, ${out ? 'out' : `${formatStock(it.qty, it.unit)}${low ? ', running low' : ''}`}. Tap for choices`}>
+      <span className={`h-3 w-3 shrink-0 rounded-full ${out ? 'bg-bad' : low ? 'bg-warn' : 'bg-good'}`} aria-hidden />
+      <span className={`min-w-0 flex-1 truncate text-lg ${out ? 'text-muted' : 'font-medium'}`}>{titleCase(it.name)}</span>
+      <span className={`shrink-0 text-base tabular-nums ${out ? 'font-semibold text-bad' : low ? 'text-warn' : 'text-muted'}`}>{out ? 'Out' : formatStock(it.qty, it.unit)}</span>
+    </button>
+  );
+}
+
 /** What is in the house. Type to find or add ("2kg flour" works), − + or type a number to change an amount, one tap to mark something out or put it on the list. */
 export function PantryPage() {
   const api = useApi();
@@ -55,9 +69,10 @@ export function PantryPage() {
   const [open, setOpen] = useState<Item | null>(null);
   const [outed, setOuted] = useState<Record<number, number>>({}); // item id -> how much there was, while Undo is on offer
   const toList = useAddToList(reload);
+  const easy = useEasy();
   const placesOn = useStore((st) => st.settings.showPlaces);
   // the 3D kitchen is a temporary view: it lasts until the tab is closed, and is never a saved setting
-  const [kitchen, setKitchen] = useState<boolean>(() => { try { return sessionStorage.getItem('turbopantry.pantry3d') === '1'; } catch { return false; } });
+  const [kitchen, setKitchen] = useState<boolean>(() => { try { return !useStore.getState().settings.easyMode && sessionStorage.getItem('turbopantry.pantry3d') === '1'; } catch { return false; } });
   const pick = (on: boolean) => { setKitchen(on); try { sessionStorage.setItem('turbopantry.pantry3d', on ? '1' : '0'); } catch { /* not kept */ } };
   const [params] = useSearchParams();
   const focus = Number(params.get('item')) || null;
@@ -118,7 +133,7 @@ export function PantryPage() {
     <div className="space-y-2 pb-4">
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-bold md:text-2xl">Pantry</h1>
-        <button className="btn flex h-10 items-center gap-1.5 px-3" onClick={() => pick(true)}><Box size={16} />3D kitchen</button>
+        {!easy && <button className="btn flex h-10 items-center gap-1.5 px-3" onClick={() => pick(true)}><Box size={16} />3D kitchen</button>}
       </div>
       {kitchen && <Kitchen3D onClose={() => pick(false)} items={items} onChange={(it, qty) => void change(it, qty)} onOut={(it) => void out(it)} onList={(it) => void toList.add(it)} />}
       {!kitchen && <form className="find-bar sticky top-14 z-10 -mx-1 flex gap-2 px-1 py-1.5 backdrop-blur md:top-16" onSubmit={(e) => { e.preventDefault(); if (!exact) void add(); }}>
@@ -126,7 +141,7 @@ export function PantryPage() {
         {text && !exact && <button className="btn btn-accent h-11 px-4" aria-label={`Add ${text}`}><Plus size={20} /></button>}
       </form>}
 
-      {!kitchen && !text && (
+      {!kitchen && !text && !easy && (
         <fieldset className="flex flex-wrap items-center gap-x-2 gap-y-1" aria-label="Show">
           <legend className="sr-only">Show</legend>
           {([['have', 'Have', counts.have], ['out', 'Out of', counts.out]] as const).map(([k, label, n]) => (
@@ -143,7 +158,7 @@ export function PantryPage() {
         </button>
       ))}
 
-      {!text && low.length > 0 && (
+      {!text && low.length > 0 && !easy && (
         <section className="card flex flex-wrap items-center gap-1.5 px-3 py-2" aria-label="Running low">
           <h2 className="mr-1 flex items-center gap-1.5 text-sm font-semibold"><AlertTriangle size={15} className="text-warn" />Running low</h2>
           <div className="flex flex-wrap gap-1.5">{low.map((it) => <button key={it.id} className="chip inline-flex min-h-[2rem] items-center gap-1.5 px-2.5 text-sm" onClick={() => void toList.add(it)}>{titleCase(it.name)}<ShoppingCart size={14} /></button>)}</div>
@@ -159,7 +174,7 @@ export function PantryPage() {
         <section key={c} aria-label={c} className="space-y-0.5">
           <h2 className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted">{c}</h2>
           <div className="card divide-y divide-line overflow-hidden">
-            {rows.map((it) => (
+            {rows.map((it) => easy ? <EasyRow key={it.id} it={it} onOpen={() => setOpen(it)} /> : (
               <Row key={it.id} it={it} undoing={it.id in outed} onOpen={() => setOpen(it)} onChange={(v) => void change(it, v)} onOut={() => void out(it)} onUndo={() => void undoOut(it)} onExpire={() => expire(it.id)}
                 onList={() => void toList.add(it)} onMore={() => nav(`/settings?tab=items&item=${it.id}`)} onDelete={() => void del(it)} highlight={focus === it.id} placeOn={placesOn} />
             ))}
@@ -168,7 +183,8 @@ export function PantryPage() {
       ))}
       {text && !groups.length && !untracked.length && <p className="px-1 text-sm text-muted">Nothing called “{text}”. Press + to add it.</p>}
       </>}
-      {open && <ItemSheet key={open.id} item={items.find((i) => i.id === open.id) ?? open} onClose={() => setOpen(null)} onSaved={reload} />}
+      {open && easy && <EasyItemSheet key={open.id} item={items.find((i) => i.id === open.id) ?? open} onClose={() => setOpen(null)} onChange={(v) => void change(items.find((i) => i.id === open.id) ?? open, v)} onOut={() => void out(items.find((i) => i.id === open.id) ?? open)} onList={() => void toList.add(items.find((i) => i.id === open.id) ?? open)} onMore={() => nav(`/settings?tab=items&item=${open.id}`)} />}
+      {open && !easy && <ItemSheet key={open.id} item={items.find((i) => i.id === open.id) ?? open} onClose={() => setOpen(null)} onSaved={reload} />}
       {toList.node}
     </div>
   );
