@@ -10,6 +10,7 @@ import { useLiveConnection } from '../lib/live.ts';
 import { useListAlerts } from '../lib/listAlerts.ts';
 import { Toasts } from './Toasts.tsx';
 import { ContextMenuHost } from '../lib/contextMenu.tsx';
+import { TimerHost } from './TimerHost.tsx';
 
 const NAV = [
   { to: '/recipes', label: 'Recipes', icon: BookOpen },
@@ -121,6 +122,7 @@ export function Layout() {
       </nav>
       <Toasts />
       <ContextMenuHost />
+      <TimerHost />
     </div>
   );
 }

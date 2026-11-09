@@ -125,11 +125,13 @@ function Question({ ing, items, choice, onPick }: { ing: Ingredient; items: Item
  */
 export function IngredientLinker({ ingredients, items, choices, onChange }: { ingredients: Ingredient[]; items: Item[]; choices: Choices; onChange(c: Choices): void }) {
   const [all, setAll] = useState(false);
-  const attention = ingredients.filter((i) => !matchItems(i.name, items).exact && matchItems(i.name, items).candidates.length > 0);
+  const [answered, setAnswered] = useState<Set<string>>(() => new Set()); // lines the person has said yes or no to: they are no longer "to check"
+  const unsure = ingredients.filter((i) => !matchItems(i.name, items).exact && matchItems(i.name, items).candidates.length > 0);
+  const attention = unsure.filter((i) => !answered.has(i.raw));
   const rest = ingredients.filter((i) => !attention.includes(i));
   const linked = ingredients.filter((i) => choices[i.raw]?.kind === 'item').length;
   const fresh = ingredients.filter((i) => choices[i.raw]?.kind === 'new').length;
-  const pick = (ing: Ingredient) => (c: Choice) => onChange({ ...choices, [ing.raw]: c });
+  const pick = (ing: Ingredient) => (c: Choice) => { onChange({ ...choices, [ing.raw]: c }); setAnswered((a) => new Set(a).add(ing.raw)); };
   return (
     <section className="space-y-4" aria-label="Link to your items">
       <p className="text-sm text-muted">Each line of the recipe is matched to something in your pantry, so the shopping list and “I cooked this” know what it is. The recipe keeps its own wording.</p>
@@ -144,7 +146,7 @@ export function IngredientLinker({ ingredients, items, choices, onChange }: { in
           {attention.map((ing, i) => <Question key={`${ing.raw}-${i}`} ing={ing} items={items} choice={choices[ing.raw] ?? { kind: 'none' }} onPick={pick(ing)} />)}
         </div>
       )}
-      {!attention.length && <p className="rounded-theme bg-good/15 p-3 text-sm"><Check size={14} className="mr-1.5 inline" />Nothing needs checking.</p>}
+      {!attention.length && <p className="rounded-theme bg-good/15 p-3 text-sm"><Check size={14} className="mr-1.5 inline" />{unsure.length ? 'All checked.' : 'Nothing needs checking.'}</p>}
       {rest.length > 0 && (
         <div>
           <button type="button" className="btn btn-ghost h-11 w-full justify-between" aria-expanded={all} onClick={() => setAll(!all)}><span>All the other lines ({rest.length})</span><span className="text-sm text-muted">{all ? 'Hide' : 'Show'}</span></button>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanSteps, highlightStep, ingredientParts, nameVariants, parseIngredient } from './index.ts';
+import { cleanSteps, findTimes, highlightStep, ingredientParts, nameVariants, parseIngredient } from './index.ts';
 
 const ing = (...lines: string[]) => lines.map((l) => parseIngredient(l));
 const plain = (segs: { text: string }[]) => segs.map((s) => s.text).join('');
@@ -78,4 +78,17 @@ describe('amounts in the method scale with the servings', () => {
     ['Cook the rice for 20 minutes at 180\u00b0C.', 2, 'Cook the rice for 20 minutes at 180\u00b0C.'],
   ])('%s x%s', (step, factor, want) => expect(text(highlightStep(step, rice, { factor }))).toBe(want));
   it('leaves the text alone at 1x', () => expect(text(highlightStep('Simmer the 1/2 cup rice gently.', rice, { factor: 1 }))).toBe('Simmer the 1/2 cup rice gently.'));
+});
+
+describe('findTimes', () => {
+  const sec = (t: string) => findTimes(t).map((s) => s.seconds);
+  it('reads minutes, hours, seconds and mixtures', () => {
+    expect(sec('Bake for 20 minutes.')).toEqual([1200]);
+    expect(sec('Simmer 1 hour 30 minutes, then rest 5 mins')).toEqual([5400, 300]);
+    expect(sec('Cook 10-15 min')).toEqual([900]);
+    expect(sec('Roast 1½ hours')).toEqual([5400]);
+    expect(sec('Stir for 45 seconds')).toEqual([45]);
+  });
+  it('ignores amounts and temperatures', () => { expect(sec('Add 5 g salt and 2 tablespoons oil at 180°C')).toEqual([]); });
+  it('reports where the text is', () => { const [t] = findTimes('Bake for 20 minutes.'); expect('Bake for 20 minutes.'.slice(t!.start, t!.end)).toBe('20 minutes'); });
 });

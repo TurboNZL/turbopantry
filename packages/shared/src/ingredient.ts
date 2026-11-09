@@ -134,6 +134,23 @@ export function parseIngredient(line: string, section: string | null = null): In
   return out;
 }
 
+/**
+ * Splits a written ingredient line into the part that says how much ("1 1/2 cups", "2-3 tbsp", "1 (14 oz) can") and the rest ("flour, sifted"), for the recipe form's two boxes.
+ * Only a leading number-and-unit counts: a line whose amount is written in words ("one cup", "a pinch of") stays whole in `rest`.
+ */
+export function splitAmount(raw: string): { amount: string; rest: string } {
+  const text = raw.replace(/\s+/g, ' ').trim();
+  if (normaliseQuantityText(text) !== text) return { amount: '', rest: text };
+  const m = LEADING.exec(text);
+  if (!m || parseQuantity(m[1]!) === null) return { amount: '', rest: text };
+  let rest = text.slice(m[0].length);
+  const size = /^\([^)]*\)\s*/.exec(rest); if (size) rest = rest.slice(size[0].length);
+  const w = /^([A-Za-z.]+)\b\.?\s*/.exec(rest);
+  if (w) { const fl = w[1]!.toLowerCase() === 'fl' && /^fl\.?\s*(oz|ounces?)\b\.?\s*/i.exec(rest); if (fl) rest = rest.slice(fl[0].length); else if (canonicalUnit(w[1]!)) rest = rest.slice(w[0].length); }
+  const amount = text.slice(0, text.length - rest.length).trim();
+  return { amount, rest: rest.replace(/^of\s+/i, '') };
+}
+
 /** True for a line that names a group ("For the sauce:", "Cheese sauce:") rather than an ingredient. */
 export function sectionHeading(line: string): string | null {
   const m = SECTION_ENDS.exec(line.trim());

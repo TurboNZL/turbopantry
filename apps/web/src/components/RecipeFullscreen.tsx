@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronLeft, ChevronRight, Minimize2, Minus, PictureInPicture2, Plus } from 'lucide-react';
-import { displayAmount, formatQuantity, highlightStep, titleCase, type Item, type Recipe } from '@turbopantry/shared';
+import { displayAmount, formatQuantity, titleCase, type Item, type Recipe } from '@turbopantry/shared';
 import { cn } from '../lib/cn.ts';
+import { StepText } from './StepText.tsx';
 import { nativeCook } from '../lib/native.ts';
 
 type Mode = 'original' | 'metric-cups' | 'metric-grams';
@@ -53,7 +54,7 @@ export function RecipeFullscreen({ r, factor, shown, known, onServings, showQuan
   useEffect(() => { document.getElementById(`cook-step-${cur}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, [cur]);
 
   const step = known ? 1 : 0.5;
-  const stepText = (i: number) => highlightStep(r.steps[i] ?? '', r.ingredients, { hideQuantities: !showQuantities, factor }).map((seg, k) => (seg.bold ? <strong key={k} className="font-semibold">{seg.text}</strong> : <span key={k}>{seg.text}</span>));
+  const stepText = (i: number) => <StepText step={r.steps[i] ?? ''} ingredients={r.ingredients} hideQuantities={!showQuantities} factor={factor} label={r.title} />;
   if (pip) { // the small floating window: only the step, the buttons are the window's own
     return (
       <div className="fixed inset-0 z-[70] flex flex-col justify-center gap-1 overflow-hidden bg-bg p-3 text-fg" role="status" aria-label="Current step">

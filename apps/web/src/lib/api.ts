@@ -27,6 +27,19 @@ export class Api {
     return data as T;
   }
 
+  /** The address the pages and pictures of this server are under ('' = the page's own). */
+  base() { return this.cfg.serverUrl.replace(/\/+$/, ''); }
+
+  /** Sends a picture from this device; answers with the path (/images/<hash>.jpg) to put on a recipe. */
+  async uploadImage(blob: Blob): Promise<string> {
+    const headers: Record<string, string> = { ...accessHeaders(this.cfg), 'content-type': blob.type || 'application/octet-stream' };
+    if (this.cfg.token) headers.authorization = `Bearer ${this.cfg.token}`;
+    const res = await fetch(`${this.cfg.serverUrl.replace(/\/+$/, '')}/api/images`, { method: 'POST', headers, body: blob });
+    const data = (await res.json().catch(() => null)) as { path?: string; error?: string } | null;
+    if (!res.ok || !data?.path) throw new ApiError(res.status, data?.error ?? `Server said ${res.status}`);
+    return data.path;
+  }
+
   health() { return this.call<Health>('GET', '/api/health', undefined, false); }
   renameMe(name: string) { return this.call<{ user: string }>('PUT', '/api/me', { name }); }
   status() { return this.call<Status>('GET', '/api/status'); }

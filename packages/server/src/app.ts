@@ -14,7 +14,7 @@ import { recipeGroupRoutes, withGroupIds, withGroups } from './recipe-groups.ts'
 import { instagramRoutes } from './instagram-routes.ts';
 import type { InstagramService } from './import/instagram-session.ts';
 import { layoutRoutes } from './layout-routes.ts';
-import { cacheImage, IMAGE_PATH, TYPE_OF } from './images.ts';
+import { cacheImage, IMAGE_PATH, saveImageBytes, TYPE_OF } from './images.ts';
 import { importFromText, importFromUrl } from './import/index.ts';
 import type { Updater } from './update.ts';
 import type { PageFetcher } from './import/safeFetch.ts';
@@ -101,6 +101,13 @@ export function createApp({ db, webDir, imagesDir, fetchPicture = safeFetchPictu
     const m = req.method ?? 'GET';
     const userName = user.name;
     if (path === '/api/events' && m === 'GET') { hub.join(req, res); return; }
+    if (path === '/api/images' && m === 'POST') { // a recipe photo from the device: the raw picture bytes in the body (at most 8 MB), answered with the path to save on the recipe
+      if (!imagesDir) return json(res, 404, { error: 'This server keeps no photos.' });
+      const chunks: Buffer[] = []; let size = 0;
+      for await (const c of req as AsyncIterable<Buffer>) { size += c.length; if (size > 8 * 1024 * 1024) return json(res, 413, { error: 'That picture is too large (8 MB at most).' }); chunks.push(c); }
+      const saved = saveImageBytes(imagesDir, Buffer.concat(chunks));
+      return saved ? json(res, 201, { path: saved }) : json(res, 400, { error: 'That file is not a picture (JPEG, PNG, GIF, WebP or AVIF).' });
+    }
     if (await pantryRoutes(path, m, req, res, db, user, hub)) return;
     if (await extraRoutes(path, m, req, res, db, user, hub)) return;
     if (await recipeGroupRoutes(path, m, req, res, db, user, hub)) return;
