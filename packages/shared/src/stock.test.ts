@@ -111,7 +111,7 @@ describe('guessCategory', () => {
 });
 
 describe('defaults and formatting', () => {
-  it('steps by 100 g, half a kilo, one each', () => { expect(defaultsForUnit('g').step).toBe(100); expect(defaultsForUnit('kg').step).toBe(0.5); expect(defaultsForUnit(null)).toEqual({ step: 1, defaultQty: 1 }); });
+  it('one tap is the whole buying amount: 500 g, a kilo, one each', () => { expect(defaultsForUnit('g')).toEqual({ step: 500, defaultQty: 500 }); expect(defaultsForUnit('kg').step).toBe(1); expect(defaultsForUnit(null)).toEqual({ step: 1, defaultQty: 1 }); });
   it('formats stock', () => { expect(formatStock(2, 'kg')).toBe('2 kg'); expect(formatStock(6, null)).toBe('6'); expect(formatStock(1.5, 'cup')).toBe('1½ cups'); });
 });
 

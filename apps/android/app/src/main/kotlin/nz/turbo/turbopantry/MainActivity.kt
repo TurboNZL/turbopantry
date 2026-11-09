@@ -13,6 +13,9 @@ import android.graphics.drawable.Icon
 import android.util.Rational
 import android.net.Uri
 import android.os.Bundle
+import android.Manifest
+import android.content.pm.PackageManager
+import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -51,6 +54,12 @@ class MainActivity : AppCompatActivity() {
             val a = intent.getStringExtra(PIP_STEP) ?: return
             if (a == "prev" || a == "next") web.evaluateJavascript("window.dispatchEvent(new CustomEvent('turbopantry-cook',{detail:'$a'}))", null)
         }
+    }
+    /** a camera request from the page (scanning a pairing QR code) waiting for the system's answer */
+    private var cameraRequest: PermissionRequest? = null
+    private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val r = cameraRequest; cameraRequest = null
+        if (granted) r?.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) else r?.deny()
     }
     private val chooser = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         fileCallback?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(r.resultCode, r.data))
@@ -110,6 +119,15 @@ class MainActivity : AppCompatActivity() {
             }
         }
         web.webChromeClient = object : WebChromeClient() {
+            override fun onPermissionRequest(request: PermissionRequest) {
+                // only the camera, only for our own page
+                val video = request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+                if (!video || request.origin.host != HOST) { request.deny(); return }
+                runOnUiThread {
+                    if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE))
+                    else { cameraRequest?.deny(); cameraRequest = request; cameraPermission.launch(Manifest.permission.CAMERA) }
+                }
+            }
             override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
                 fileCallback?.onReceiveValue(null)
                 fileCallback = callback

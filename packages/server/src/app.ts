@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { existsSync, statSync, createReadStream } from 'node:fs';
 import { extname, join, normalize, sep } from 'node:path';
 import { APP_NAME, type Health, type Status } from '@turbopantry/shared';
-import { countUsers, userForToken, type Db, type User } from './db.ts';
+import { countUsers, renameUser, userForToken, type Db, type User } from './db.ts';
 import { countRecipes, createRecipe, deleteRecipe, getRecipe, listRecipes, updateRecipe, validateRecipe } from './recipes.ts';
 import { HttpError, json, readJson } from './http.ts';
 import { Hub } from './events.ts';
@@ -86,6 +86,10 @@ export function createApp({ db, webDir, imagesDir, fetchPicture = safeFetchPictu
       if (!user) return json(res, 401, { error: 'Wrong or missing token' });
       if (path === '/api/status' && req.method === 'GET') {
         return json(res, 200, { user: user.name, users: countUsers(db), recipes: countRecipes(db), lists: countOpen(db) } satisfies Status);
+      }
+      if (path === '/api/me' && req.method === 'PUT') {
+        const b = await readJson(req) as { name?: unknown };
+        try { return json(res, 200, { user: renameUser(db, user.id, typeof b.name === 'string' ? b.name : '') }); } catch (e) { return json(res, 400, { error: (e as Error).message }); }
       }
       return api(path, url, req, res, user);
     }

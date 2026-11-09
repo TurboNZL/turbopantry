@@ -131,6 +131,8 @@ const MIGRATIONS: string[] = [
    );`,
   // items that must never run out: they go on the shopping list by themselves when they are out or low
   `ALTER TABLE items ADD COLUMN essential INTEGER NOT NULL DEFAULT 0;`,
+  // one tap on + or - now changes an amount by the item's whole buying amount (100% of it): every item's step is reset to its default amount (still editable per item)
+  `UPDATE items SET step = default_qty WHERE default_qty > 0;`,
 ];
 
 export type Db = DatabaseSync;
@@ -185,6 +187,16 @@ export function userForToken(db: Db, token: string): User | null {
     return { id: r.id, name: r.name, isAdmin: !!r.is_admin };
   }
   return null;
+}
+
+/** Renames an account (the name is only a label; the token is what signs in). Names are unique. */
+export function renameUser(db: Db, id: number, name: string): string {
+  const clean = name.trim().slice(0, 40);
+  if (!clean) throw new Error('A name cannot be empty.');
+  const taken = db.prepare('SELECT id FROM users WHERE name = ? AND id <> ?').get(clean, id);
+  if (taken) throw new Error('Someone else already has that name.');
+  db.prepare('UPDATE users SET name = ? WHERE id = ?').run(clean, id);
+  return clean;
 }
 
 const newToken = () => `tp_${randomBytes(24).toString('base64url')}`;

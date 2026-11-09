@@ -28,6 +28,7 @@ export class Api {
   }
 
   health() { return this.call<Health>('GET', '/api/health', undefined, false); }
+  renameMe(name: string) { return this.call<{ user: string }>('PUT', '/api/me', { name }); }
   status() { return this.call<Status>('GET', '/api/status'); }
   listRecipes(q = '', group?: number | null) { const p = new URLSearchParams(); if (q) p.set('q', q); if (group) p.set('group', String(group)); return this.call<RecipeSummary[]>('GET', `/api/recipes${p.size ? `?${p}` : ''}`); }
   listRecipeGroups() { return this.call<RecipeGroup[]>('GET', '/api/recipe-groups'); }

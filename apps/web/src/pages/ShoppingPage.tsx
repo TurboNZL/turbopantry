@@ -7,6 +7,7 @@ import { Stepper } from '../components/Stepper.tsx';
 import { StoreMap3D } from '../components/floor3d/index.tsx';
 import { useAddToList } from '../components/useAddToList.tsx';
 import { useRowMenu } from '../lib/contextMenu.tsx';
+import { useClicks } from '../lib/clicks.ts';
 import { useItems, useListEntries, useStores } from '../lib/data.ts';
 import { useStore } from '../lib/store.ts';
 import { toast } from '../lib/toast.ts';
@@ -25,22 +26,23 @@ const TONE = {
 } as const;
 
 /** One list line, one row high: tap the name to cross it off (it goes into the pantry), the red bin takes it off the list WITHOUT adding it to the pantry. */
-function Line({ e, leaving, onBuy, onView, onQty, onRemove, onOut }: { e: ListEntry; leaving: 'tick' | 'fold' | null; onBuy(): void; onView(): void; onQty(v: number): void; onRemove(): void; onOut(): void }) {
+function Line({ e, leaving, canOut, onBuy, onView, onQty, onRemove, onOut }: { e: ListEntry; canOut: boolean; leaving: 'tick' | 'fold' | null; onBuy(): void; onView(): void; onQty(v: number): void; onRemove(): void; onOut(): void }) {
   const menu = useRowMenu(titleCase(e.name), () => [
     { label: 'Cross off (bought)', icon: <Check size={16} />, run: onBuy },
     { label: 'View in the pantry', icon: <Package size={16} />, run: onView },
-    { label: 'I’m out of it', icon: <PackageX size={16} />, run: onOut },
+    ...(canOut ? [{ label: 'I’m out of it', icon: <PackageX size={16} />, run: onOut }] : []),
     { label: 'Remove, not bought', icon: <Trash2 size={16} />, danger: true, run: onRemove },
   ]);
+  const clicks = useClicks(onBuy, onView); // click crosses it off, a double click (mouse) opens it in the pantry
   return (
     <div className={cn('overflow-hidden transition-[max-height,opacity] duration-300 ease-out', leaving === 'fold' ? 'max-h-0 opacity-0' : 'max-h-12 opacity-100')}>
       <div {...menu} className={cn('flex h-11 items-center gap-0.5 pl-3 pr-1 transition-colors duration-200', leaving && 'bg-good/10')}>
-        <button className="flex h-11 min-w-0 flex-1 items-center gap-1.5 text-left text-[15px]" onClick={onBuy} disabled={!!leaving} aria-label={`Cross off ${titleCase(e.name)}`}>
+        <button className="flex h-11 min-w-0 flex-1 items-center gap-1.5 text-left text-[15px]" {...clicks} title="Tap: cross off · double-click: open in the pantry" disabled={!!leaving} aria-label={`Cross off ${titleCase(e.name)}`}>
           {leaving && <Check size={16} strokeWidth={3} className="shrink-0 text-good" />}
           <span className={cn('truncate font-medium transition-colors duration-200', leaving && 'text-muted line-through')}>{titleCase(e.name)}{e.note && <span className="ml-1.5 text-xs font-normal text-muted">{e.note}</span>}</span>
         </button>
-        {e.qty !== null && !leaving && <Stepper compact label={titleCase(e.name)} value={e.qty} step={e.step} unit={e.unit} onChange={onQty} />}
-        {!leaving && <button className="flex h-8 w-8 shrink-0 items-center justify-center rounded-theme bg-bad/15 text-bad" aria-label={`Remove ${titleCase(e.name)} from the list without adding it to the pantry`} title="Remove, not bought" onClick={onRemove}><Trash2 size={16} /></button>}
+        {e.qty !== null && !leaving ? <Stepper compact label={titleCase(e.name)} value={e.qty} step={e.step} unit={e.unit} onChange={onQty} /> : <span className="w-[6.5rem] shrink-0" aria-hidden />}
+        {!leaving ? <button className="flex h-8 w-8 shrink-0 items-center justify-center rounded-theme bg-bad/15 text-bad" aria-label={`Remove ${titleCase(e.name)} from the list without adding it to the pantry`} title="Remove, not bought" onClick={onRemove}><Trash2 size={16} /></button> : <span className="w-8 shrink-0" aria-hidden />}
       </div>
     </div>
   );
@@ -192,7 +194,7 @@ export function ShoppingPage() {
           <section key={c} className="space-y-0.5" aria-label={c}>
             <h2 className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted">{c}</h2>
             <div className="card divide-y divide-line overflow-hidden">
-              {rows.map((e) => <Line key={e.id} e={e} leaving={leaving[e.id] ?? null} onBuy={() => cross(e)} onView={() => nav(`/pantry?item=${e.itemId}`)} onQty={(v) => void step(e, v)} onRemove={() => void remove(e)} onOut={() => void markOut(e)} />)}
+              {rows.map((e) => <Line key={e.id} e={e} canOut={!!e.itemId && (items.find((i) => i.id === e.itemId)?.qty ?? 0) > 0} leaving={leaving[e.id] ?? null} onBuy={() => cross(e)} onView={() => nav(`/pantry?item=${e.itemId}`)} onQty={(v) => void step(e, v)} onRemove={() => void remove(e)} onOut={() => void markOut(e)} />)}
             </div>
           </section>
         ))}

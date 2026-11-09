@@ -251,16 +251,17 @@ export function guessCategory(name: string): string {
   return best?.cat ?? 'Other';
 }
 
-/** A sensible first step and default amount for a unit; the user tweaks both per item. */
+/** A sensible default amount for a unit, and the step: one tap changes an amount by the whole buying amount (100% of it). Both can be changed per item. */
 export function defaultsForUnit(unit: string | null, mode?: CountMode): { step: number; defaultQty: number } {
-  if (mode === 'chunks' && unit && ['g', 'kg', 'ml', 'l'].includes(unit)) return unit === 'g' || unit === 'ml' ? { step: 500, defaultQty: 500 } : { step: 0.5, defaultQty: 0.5 };
+  const q = (n: number) => ({ step: n, defaultQty: n });
+  if (mode === 'chunks' && unit && ['g', 'kg', 'ml', 'l'].includes(unit)) return unit === 'g' || unit === 'ml' ? q(500) : q(0.5);
   switch (unit) {
-    case 'g': return { step: 100, defaultQty: 500 };
-    case 'kg': return { step: 0.5, defaultQty: 1 };
-    case 'ml': return { step: 100, defaultQty: 500 };
-    case 'l': return { step: 0.5, defaultQty: 1 };
-    case 'cup': return { step: 0.5, defaultQty: 2 };
-    default: return { step: 1, defaultQty: 1 };
+    case 'g': return q(500);
+    case 'kg': return q(1);
+    case 'ml': return q(500);
+    case 'l': return q(1);
+    case 'cup': return q(2);
+    default: return q(1);
   }
 }
 
