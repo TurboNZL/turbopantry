@@ -45,3 +45,11 @@
 .f3-label b.ok { background: #64748b; }
 .f3-label b.walk { background: hsl(var(--accent)); color: hsl(var(--accent-fg)); }
 .f3-label .t { overflow: hidden; text-overflow: ellipsis; }
+
+/* walls only close a room in: they are drawn, but never picked in the viewer; areas are flat tiles with a soft tint */
+.f3-block[data-wall]:not([data-edit]) { pointer-events: none; }
+.f3-block[data-wall] > i { background-image: none !important; }
+.f3-block[data-zone] > i { opacity: .72; }
+.f3-block[data-zone] .f3-top { opacity: .85; }
+/* the viewer fills the room the page leaves (see Stage3D) */
+.f3-viewport[data-fill] { height: 100%; border-radius: 0; border: 0; }

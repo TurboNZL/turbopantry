@@ -13,14 +13,12 @@ function Switch({ label, hint, on, onChange }: { label: string; hint?: string; o
   );
 }
 
-/** Settings > Appearance: the optional faux-3D kitchen and shop maps. Off, nothing 3D is loaded at all. */
+/** Settings > Appearance: what the pantry rows show. (The 3D views are not a setting: they are opened from the Pantry and Shopping pages.) */
 export function View3dCard() {
   const { settings, updateSettings } = useStore();
   return (
-    <Section title="3D views">
-      <p className="text-sm text-muted">Draw your kitchen and the shops you use as a little 3D floor plan you can turn, tilt and zoom with big buttons. Tap a cupboard to see what is in it; tap an aisle to see what to grab there. You build the plan yourself. The switches are saved on this device; the plans are shared with the household.</p>
-      <Switch label="Kitchen view on the Pantry page" on={settings.view3d} onChange={(v) => updateSettings({ view3d: v })} />
-      <Switch label="Shop map on the Shopping page" hint="Opens from straight above: tap where you are in the shop to look around from there." on={settings.listMap3d} onChange={(v) => updateSettings({ listMap3d: v })} />
+    <Section title="Pantry rows">
+      <Switch label="Show where things are kept" hint="Adds the place (Fridge, Cupboard…) after each item's name in the pantry list. Off by default; the 3D kitchen uses places either way." on={settings.showPlaces} onChange={(v) => updateSettings({ showPlaces: v })} />
     </Section>
   );
 }

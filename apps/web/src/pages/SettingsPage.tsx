@@ -5,6 +5,7 @@ import { Section } from '../components/Section.tsx';
 import { ItemsTab } from '../components/ItemsTab.tsx';
 import { DuplicatesTab } from '../components/DuplicatesTab.tsx';
 import { StoresTab } from '../components/StoresTab.tsx';
+import { KitchenTab } from '../components/KitchenTab.tsx';
 import { PairCard, ServerCard } from '../components/ServerCard.tsx';
 import { InstagramCard } from '../components/InstagramCard.tsx';
 import { ServerUpdateCard } from '../components/ServerUpdate.tsx';
@@ -15,7 +16,7 @@ import { AppUpdatesCard } from '../components/AppUpdatesCard.tsx';
 import { ErrorBoundary } from '../components/ErrorBoundary.tsx';
 import { cn } from '../lib/cn.ts';
 
-const TABS = [{ id: 'look', label: 'Appearance' }, { id: 'items', label: 'Items' }, { id: 'duplicates', label: 'Duplicates' }, { id: 'stores', label: 'Stores' }, { id: 'server', label: 'Server' }, { id: 'guides', label: 'Guides' }];
+const TABS = [{ id: 'look', label: 'Appearance' }, { id: 'items', label: 'Items' }, { id: 'duplicates', label: 'Duplicates' }, { id: 'stores', label: 'Stores' }, { id: 'kitchen', label: 'Kitchen' }, { id: 'server', label: 'Server' }, { id: 'guides', label: 'Guides' }];
 
 /** Settings: a tab strip that wraps instead of scrolling sideways (settings-shell convention), one titled panel per topic. */
 export function SettingsPage() {
@@ -40,6 +41,7 @@ export function SettingsPage() {
       {tab === 'items' && <ItemsTab />}
       {tab === 'duplicates' && <DuplicatesTab />}
       {tab === 'stores' && <StoresTab />}
+      {tab === 'kitchen' && <KitchenTab />}
       {tab === 'server' && <><AppUpdatesCard /><NotificationsCard /><ServerUpdateCard /><ServerCard /><PairCard /><InstagramCard /></>}
       {tab === 'guides' && <GuidesTab />}
       </ErrorBoundary>

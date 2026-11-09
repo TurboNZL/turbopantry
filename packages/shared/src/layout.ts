@@ -47,8 +47,16 @@ export const BLOCK_COLORS = ['#c9d6e2', '#8fb8de', '#7fd1b9', '#e8c170', '#e39a8
 /** There is one kind of block. Give it a name and things can be kept in it (a kitchen) or shopping groups put in it (a shop). */
 export const NEW_BLOCK = { kind: 'block', label: '', w: 2, d: 2, h: 3, color: '#8fb8de' } as const;
 
-/** Every block can hold things (older plans had walls and doorways that could not; they can now). A kitchen block is a place once it has a name (`placeOf`). */
-export const holdsThings = (_kind: string): boolean => true;
+/** A wall: a thin, tall, plain block that only closes a room in. Added the same way as a block, but it is never a place and cannot be picked in the viewer. */
+export const NEW_WALL = { kind: 'wall', label: '', w: 6, d: 1, h: 8, color: '#a4a4a4' } as const;
+
+/** A shop area: a flat rectangle drawn over the grid for some shopping groups. Its corners may sit between grid lines (quarter cells). */
+export const NEW_ZONE = { kind: 'zone', h: 1 } as const;
+export const isZone = (b: Pick<Block, 'kind'>): boolean => b.kind === 'zone';
+export const isWall = (b: Pick<Block, 'kind'>): boolean => b.kind === 'wall';
+
+/** Blocks can hold things unless they are walls. A kitchen block is a place once it has a name (`placeOf`). */
+export const holdsThings = (kind: string): boolean => kind !== 'wall';
 
 export const newId = (): string => Math.random().toString(36).slice(2, 10).padEnd(8, '0');
 
@@ -62,6 +70,11 @@ export const footprint = (b: Pick<Block, 'w' | 'd' | 'rot'>): { w: number; d: nu
 
 /** Sizes bounded, turning normalised, and the box pulled back inside the floor. */
 export function clampBlock(b: Block, size: number): Block {
+  if (b.kind === 'zone') { // drawn areas: quarter cells, sitting inside the floor
+    const q = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, Math.round((Number.isFinite(v) ? v : lo) * 4) / 4));
+    const w = q(b.w, 0.5, size), d = q(b.d, 0.5, size);
+    return { ...b, rot: 0, w, d, h: 1, z: 0, x: q(b.x, 0, size - w), y: q(b.y, 0, size - d) };
+  }
   const w = clampInt(b.w, 1, Math.min(MAX_SIDE, size)), d = clampInt(b.d, 1, Math.min(MAX_SIDE, size));
   const rot = ([0, 90, 180, 270].includes(b.rot) ? b.rot : 0) as Block['rot'];
   const f = footprint({ w, d, rot });
@@ -78,7 +91,7 @@ export function overlaps(a: Block, b: Block): boolean {
  * Blocks are taken from the bottom up, so an existing stack keeps its order; `top` is a block that was just dropped, which always lands on top of what it overlaps.
  */
 export function settle(blocks: Block[], top?: string): Block[] {
-  const order = blocks.map((b, i) => ({ b, i })).sort((p, q) => (p.b.id === top ? 1 : 0) - (q.b.id === top ? 1 : 0) || (p.b.z ?? 0) - (q.b.z ?? 0) || p.i - q.i);
+  const order = blocks.filter((b) => b.kind !== 'zone').map((b, i) => ({ b, i })).sort((p, q) => (p.b.id === top ? 1 : 0) - (q.b.id === top ? 1 : 0) || (p.b.z ?? 0) - (q.b.z ?? 0) || p.i - q.i);
   const placed: Block[] = [];
   const out = new Map<string, Block>();
   for (const { b } of order) {
@@ -87,13 +100,14 @@ export function settle(blocks: Block[], top?: string): Block[] {
     const nb = { ...b, z };
     placed.push(nb); out.set(b.id, nb);
   }
-  return blocks.map((b) => out.get(b.id)!);
+  return blocks.map((b) => out.get(b.id) ?? { ...b, z: 0 }); // zones lie flat and may overlap anything
 }
 
 /** Whether `b` fits inside the floor and the stack it would make is not too high. It may sit on other blocks. */
 export function canPlace(blocks: Block[], b: Block, size: number): boolean {
   const f = footprint(b);
   if (b.x < 0 || b.y < 0 || b.x + f.w > size || b.y + f.d > size) return false;
+  if (b.kind === 'zone') return true;
   return settle([...blocks.filter((o) => o.id !== b.id), b], b.id).every((o) => (o.z ?? 0) + o.h <= MAX_STACK);
 }
 
@@ -119,11 +133,12 @@ export function uniqueLabel(blocks: Block[], label: string, exceptId?: string): 
 }
 
 /** A new block with the given name, in the free floor spot nearest `near`, or null when there is no room. */
-export function newBlock(blocks: Block[], label: string, size: number, near?: { x: number; y: number }): Block | null {
-  const spot = freeSpot(blocks, NEW_BLOCK.w, NEW_BLOCK.d, size, 0, near);
+export function newBlock(blocks: Block[], label: string, size: number, near?: { x: number; y: number }, what: 'block' | 'wall' = 'block'): Block | null {
+  const t = what === 'wall' ? NEW_WALL : NEW_BLOCK;
+  const spot = freeSpot(blocks, t.w, t.d, size, 0, near);
   if (!spot) return null;
-  const name = label.trim().slice(0, MAX_LABEL);
-  return settle([...blocks, { id: newId(), kind: NEW_BLOCK.kind, ...spot, w: NEW_BLOCK.w, d: NEW_BLOCK.d, h: NEW_BLOCK.h, rot: 0, label: name ? uniqueLabel(blocks, name) : '', color: NEW_BLOCK.color }]).at(-1)!;
+  const name = what === 'wall' ? '' : label.trim().slice(0, MAX_LABEL);
+  return settle([...blocks, { id: newId(), kind: t.kind, ...spot, w: t.w, d: t.d, h: t.h, rot: 0, label: name ? uniqueLabel(blocks, name) : '', color: t.color }]).at(-1)!;
 }
 
 /** A copy next to the original (or in any free spot). */
@@ -143,7 +158,7 @@ export function starterKitchen(): Layout {
 }
 
 /** The place name of a block: its explicit place, else its label. Null while the block has no name (a block you name is a place things can be kept in). */
-export const placeOf = (b: Block): string | null => b.place?.trim() || b.label.trim() || null;
+export const placeOf = (b: Block): string | null => (b.kind === 'wall' ? null : b.place?.trim() || b.label.trim() || null);
 
 /**
  * The shopping groups in the order the shop is walked: the groups of block 1, then block 2, ... then every group nothing claimed, in `rest`'s
@@ -160,6 +175,9 @@ export function walkOrder(blocks: Block[], rest: string[] = GROUPS): string[] {
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const KIND = /^[a-z][a-z0-9-]{0,23}$/;
+
+/** An older block-style shop plan as drawn areas: same place and size, flat, groups and walking order kept. */
+export const blockToZone = (b: Block): Block => (b.kind === 'zone' ? b : clampBlock({ ...b, kind: 'zone', rot: 0, ...(({ w, d }) => ({ w, d }))(footprint(b)), h: 1, z: 0 }, FLOOR.store));
 
 /** Checks and cleans a plan from outside (unknown keys dropped, numbers bounded, strings trimmed). Returns a message when it cannot be used. */
 export function sanitizeLayout(raw: unknown, kind: LayoutKind): Layout | string {

@@ -17,7 +17,7 @@ function renumber(blocks: Block[]): Block[] {
   return blocks.map((b) => { if (b.walk === undefined) return b; return { ...b, walk: order.indexOf(b.id) + 1 }; });
 }
 
-function GroupSheet({ block, onChange, onClose }: { block: Block; onChange(groups: string[]): void; onClose(): void }) {
+export function GroupSheet({ block, onChange, onClose }: { block: Block; onChange(groups: string[]): void; onClose(): void }) {
   const has = new Set(block.groups ?? []);
   const toggle = (g: string) => onChange(has.has(g) ? [...has].filter((x) => x !== g) : [...has, g]);
   return (
@@ -53,6 +53,7 @@ export function LayoutEditor({ kind, layout, onSave, onDone, cam }: { kind: Layo
   const [walkMode, setWalkMode] = useState(false);
   const [groupsFor, setGroupsFor] = useState(false);
   const [newName, setNewName] = useState('');
+  const [what, setWhat] = useState<'block' | 'wall'>('block');
   const blocksRef = useRef(blocks); blocksRef.current = blocks;
   const dragBase = useRef<Block[] | null>(null);
   const lastKey = useRef<{ key: string; at: number } | null>(null);
@@ -90,7 +91,7 @@ export function LayoutEditor({ kind, layout, onSave, onDone, cam }: { kind: Layo
   const remove = () => { if (!sel) return; commit(settle(renumber(blocks.filter((b) => b.id !== sel.id)))); setSelectedId(null); setTab('add'); };
   const add = () => {
     if (blocks.length >= MAX_BLOCKS) { toast(`That is the most blocks a plan can have (${MAX_BLOCKS}).`); return; }
-    const b = newBlock(blocks, newName, size, { x: size / 2, y: size / 2 });
+    const b = newBlock(blocks, newName, size, { x: size / 2, y: size / 2 }, what);
     if (!b) { toast('There is no free space left on the floor. Make something smaller or delete a block.'); return; }
     commit(settle([...blocks, b], b.id)); setSelectedId(b.id); setTab('edit'); setNewName('');
   };
@@ -158,28 +159,31 @@ export function LayoutEditor({ kind, layout, onSave, onDone, cam }: { kind: Layo
 
       <div role="tablist" aria-label="Builder" className="grid grid-cols-2 gap-1 rounded-theme border border-line bg-raised p-1">
         {(['add', 'edit'] as const).map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cn('min-h-[2.75rem] rounded-theme px-2 text-sm font-medium', tab === t ? 'bg-accent text-accent-fg shadow-sm' : 'text-muted')}>{t === 'add' ? 'Add a block' : sel ? `Edit ${sel.label || 'block'}` : 'Edit block'}</button>
+          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cn('min-h-[2.75rem] rounded-theme px-2 text-sm font-medium', tab === t ? 'bg-accent text-accent-fg shadow-sm' : 'text-muted')}>{t === 'add' ? 'Add' : sel ? `Edit ${sel.label || (sel.kind === 'wall' ? 'wall' : 'block')}` : 'Edit'}</button>
         ))}
       </div>
 
       {tab === 'add' && (
         <div className="card space-y-2 p-3">
-          <p className="text-sm text-muted">There is one kind of block. Name it ({kind === 'pantry' ? 'a named block is a place things can be kept in' : 'then choose the shopping groups it holds'}), put it on the floor, and drag it where it goes. Drop one on another to stack them. {blocks.length}/{MAX_BLOCKS} blocks.</p>
+          <div role="radiogroup" aria-label="What to add" className="grid grid-cols-2 gap-1 rounded-theme border border-line bg-raised p-1">
+            {(['block', 'wall'] as const).map((w) => <button key={w} type="button" role="radio" aria-checked={what === w} onClick={() => setWhat(w)} className={cn('min-h-[2.5rem] rounded-theme px-2 text-sm font-medium', what === w ? 'bg-accent text-accent-fg shadow-sm' : 'text-muted')}>{w === 'block' ? 'Block' : 'Wall'}</button>)}
+          </div>
+          <p className="text-sm text-muted">{what === 'wall' ? 'A wall is a thin, tall slab that closes a room in. It has no name and nothing is kept in it. Drag it into place, and stretch it with the width.' : `Name it (${kind === 'pantry' ? 'a named block is a place things can be kept in' : 'then choose the shopping groups it holds'}), put it on the floor, and drag it where it goes. Drop one on another to stack them.`} {blocks.length}/{MAX_BLOCKS} blocks.</p>
           <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); add(); }}>
-            <input className="input h-12 min-w-0 flex-1 text-base" value={newName} maxLength={MAX_LABEL} placeholder={kind === 'pantry' ? 'Name, e.g. Fridge' : 'Name, e.g. Aisle 3'} aria-label="Name of the new block" onChange={(e) => setNewName(e.target.value)} />
-            <button className="btn btn-accent flex h-12 shrink-0 items-center gap-1.5 px-4 text-base"><Plus size={18} />Add block</button>
+            {what === 'block' && <input className="input h-12 min-w-0 flex-1 text-base" value={newName} maxLength={MAX_LABEL} placeholder={kind === 'pantry' ? 'Name, e.g. Fridge' : 'Name, e.g. Aisle 3'} aria-label="Name of the new block" onChange={(e) => setNewName(e.target.value)} />}
+            <button className="btn btn-accent flex h-12 flex-1 shrink-0 items-center justify-center gap-1.5 px-4 text-base"><Plus size={18} />Add {what}</button>
           </form>
         </div>
       )}
 
       {tab === 'edit' && (sel ? (
         <div className="card space-y-3 p-3">
-          <label className="block text-sm"><span className="mb-1 block font-medium">Name</span>
+          {sel.kind !== 'wall' && <label className="block text-sm"><span className="mb-1 block font-medium">Name</span>
             <input className="input h-11 w-full" value={sel.label} maxLength={MAX_LABEL} aria-label="Block name"
               onChange={(e) => change(sel.id, { label: e.target.value }, `label:${sel.id}`)}
               onBlur={() => { const l = sel.label.trim(); const u = l ? uniqueLabel(blocks, l, sel.id) : sel.label; if (u !== sel.label) change(sel.id, { label: u }); }} />
-          </label>
-          {kind === 'pantry' && <p className="-mt-1 text-xs text-muted">{sel.label.trim() ? 'Items kept here use this name as their place.' : 'Give it a name and you can keep things in it.'}</p>}
+          </label>}
+          {kind === 'pantry' && sel.kind !== 'wall' && <p className="-mt-1 text-xs text-muted">{sel.label.trim() ? 'Items kept here use this name as their place.' : 'Give it a name and you can keep things in it.'}</p>}
           <div className="flex flex-wrap gap-2">
             <button className="btn flex h-11 items-center gap-1.5 px-3" onClick={rotate}><RotateCw size={18} />Turn 90°</button>
             <button className="btn flex h-11 items-center gap-1.5 px-3" onClick={dup}><Copy size={18} />Duplicate</button>

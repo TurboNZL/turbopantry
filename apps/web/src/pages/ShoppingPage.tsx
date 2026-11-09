@@ -11,7 +11,6 @@ import { useItems, useListEntries, useStores } from '../lib/data.ts';
 import { useStore } from '../lib/store.ts';
 import { toast } from '../lib/toast.ts';
 import { useApi } from '../lib/useApi.ts';
-import { Segmented } from '../components/Segmented.tsx';
 import { Select } from '../components/Select.tsx';
 import { cn } from '../lib/cn.ts';
 
@@ -80,14 +79,16 @@ export function ShoppingPage() {
   const { settings, updateSettings } = useStore();
   const [q, setQ] = useState('');
   const [view, setView] = useState<'list' | 'pantry'>('list');
-  const [show, setShow] = useState<'list' | 'map'>(() => { try { return localStorage.getItem('turbopantry.shoppingView') === 'map' ? 'map' : 'list'; } catch { return 'list'; } });
-  const pickShow = (v: 'list' | 'map') => { setShow(v); try { localStorage.setItem('turbopantry.shoppingView', v); } catch { /* not saved */ } };
+  // the 3D shop map is a temporary view: it lasts until the tab is closed, and is never a saved setting
+  const [map, setMapOn] = useState<boolean>(() => { try { return sessionStorage.getItem('turbopantry.shop3d') === '1'; } catch { return false; } });
+  const pickMap = (on: boolean) => { setMapOn(on); try { sessionStorage.setItem('turbopantry.shop3d', on ? '1' : '0'); } catch { /* not kept */ } };
   const nav = useNavigate();
   const [leaving, setLeaving] = useState<Record<number, 'tick' | 'fold'>>({});
   const toList = useAddToList(() => { reload(); reloadItems(); });
 
-  const store = stores.find((s) => s.id === settings.storeId) ?? null;
-  const map = show === 'map' && stores.length > 0;
+  const chosen = stores.find((s) => s.id === settings.storeId) ?? null;
+  const store = chosen ?? (map ? stores[0] ?? null : null); // the map needs a store: without a chosen one it opens the first
+  const showMap = map && !!store;
   const order = groupOrder(store);
   const onList = useMemo(() => new Set(entries.map((e) => e.itemId).filter((x): x is number => x !== null)), [entries]);
   const text = q.trim();
@@ -146,16 +147,13 @@ export function ShoppingPage() {
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-bold md:text-2xl">Shopping</h1>
         <div className="flex items-center gap-2">
-          {stores.length > 0 && <Segmented<'list' | 'map'> label="Shopping view" value={show} onChange={pickShow} options={[{ value: 'list', label: 'List' }, { value: 'map', label: 'Store' }]} />}
+          {stores.length > 0 && <button className="btn flex h-9 items-center gap-1.5 px-3" onClick={() => pickMap(true)}><MapIcon size={16} />3D map</button>}
           {stores.length > 0 && <label className="flex items-center gap-1.5 text-sm"><StoreIcon size={16} className="text-muted" aria-hidden /><span className="sr-only">Store</span>
             <Select className="h-9 w-32 min-w-0 !py-0" aria-label="Store" value={settings.storeId ? String(settings.storeId) : ''} onChange={(v) => updateSettings({ storeId: v ? Number(v) : null })} options={[{ value: '', label: 'Standard order' }, ...stores.map((s) => ({ value: String(s.id), label: s.name }))]} /></label>}
         </div>
       </div>
-      {map ? (
-        !settings.listMap3d ? <div className="card space-y-2 p-5 text-center"><p className="font-medium">The store view is a 3D map</p><p className="text-sm text-muted">Turn on the shop map to see what to grab in each part of the shop.</p><button className="btn btn-accent h-11 px-4" onClick={() => updateSettings({ listMap3d: true })}>Turn on the shop map</button></div>
-        : !store ? <div className="card p-5 text-center text-sm text-muted">Pick a store above to see its map.</div>
-        : <StoreMap3D store={store} entries={entries} items={items} />
-      ) : <>
+      {showMap && <StoreMap3D store={store!} entries={entries} items={items} onClose={() => pickMap(false)} />}
+      {!showMap && <>
       <form className="find-bar sticky top-14 z-10 -mx-1 px-1 py-1.5 backdrop-blur md:top-16" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
         <div className="flex gap-2">
           <input className="input find-box h-11 flex-1 text-base" placeholder={view === 'pantry' ? 'Search the pantry' : 'Add: milk, 750 ch, 2kg flour…'} aria-label={view === 'pantry' ? 'Search the pantry' : 'Add to the list'} value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="done" autoCapitalize="none" />

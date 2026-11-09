@@ -7,36 +7,41 @@ import { Stepper } from '../components/Stepper.tsx';
 import { UndoButton } from '../components/UndoButton.tsx';
 import { useAddToList } from '../components/useAddToList.tsx';
 import { useRowMenu } from '../lib/contextMenu.tsx';
+import { useClicks } from '../lib/clicks.ts';
 import { useItems } from '../lib/data.ts';
 import { toast } from '../lib/toast.ts';
 import { useApi } from '../lib/useApi.ts';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Kitchen3D } from '../components/floor3d/index.tsx';
 import { useStore } from '../lib/store.ts';
-import { Box, List as ListIcon } from 'lucide-react';
+import { Box } from 'lucide-react';
 
 interface RowProps { it: Item; undoing: boolean; onOpen(): void; onChange(qty: number): void; onOut(): void; onUndo(): void; onExpire(): void; onList(): void; onMore(): void; onDelete(): void }
 
-function Row({ it, undoing, onOpen, onChange, onOut, onUndo, onExpire, onList, onMore, onDelete, highlight }: RowProps & { highlight: boolean }) {
+function Row({ it, undoing, placeOn, onOpen, onChange, onOut, onUndo, onExpire, onList, onMore, onDelete, highlight }: RowProps & { highlight: boolean; placeOn: boolean }) {
   const low = it.minQty > 0 && it.qty <= it.minQty;
   const menu = useRowMenu(titleCase(it.name), () => [
     { label: 'Add to the shopping list', icon: <ShoppingCart size={16} />, run: onList },
-    { label: 'Mark as out', icon: <PackageX size={16} />, run: onOut },
+    ...(it.qty > 0 ? [{ label: 'Mark as out', icon: <PackageX size={16} />, run: onOut }] : []), // only when there is some to mark out
     { label: 'Edit', icon: <Pencil size={16} />, run: onOpen },
     { label: 'More settings', icon: <SlidersHorizontal size={16} />, run: onMore },
     { label: 'Delete', icon: <Trash2 size={16} />, danger: true, run: onDelete },
   ]);
   const out = it.qty === 0 && !undoing;
+  // every button has its own fixed slot, so nothing moves when an item is out or an Undo is on offer: name | out | - amount + | list
+  const clicks = useClicks(onOpen, onList);
   return (
     <div {...menu} id={`item-${it.id}`} className={`flex h-11 items-center gap-0.5 pl-3 pr-1 ${highlight ? 'bt-flash' : ''}`}>
-      <button className="min-w-0 flex-1 truncate py-2 text-left text-[15px]" onClick={onOpen} aria-label={`${titleCase(it.name)} settings`}>
+      <button className="min-w-0 flex-1 truncate py-2 text-left text-[15px]" {...clicks} aria-label={`${titleCase(it.name)} settings`} title="Tap: settings · double-click: add to the list">
         <span className={out ? 'text-muted' : 'font-medium'}>{titleCase(it.name)}</span>{it.essential && <Pin size={12} className="ml-1 inline text-accent" aria-label="Can't run out" />}
-        {(low || it.place) && <span className="ml-1.5 text-xs text-muted">{[low && !out && 'running low', it.place].filter(Boolean).join(' · ')}</span>}
+        {(low || it.place) && <span className="ml-1.5 text-xs text-muted">{[low && !out && 'running low', placeOn && it.place].filter(Boolean).join(' · ')}</span>}
       </button>
+      <span className="relative h-8 w-8 shrink-0">
+        {undoing ? <span className="absolute right-0 top-0"><UndoButton compact onUndo={onUndo} onExpire={onExpire} label="Undo" /></span>
+          : <button className="btn btn-ghost flex h-8 w-8 items-center justify-center !p-0 disabled:opacity-30" aria-label={`Mark ${titleCase(it.name)} as out`} title="Mark as out" onClick={onOut} disabled={out}><PackageX size={17} /></button>}
+      </span>
       <Stepper compact label={titleCase(it.name)} value={it.qty} step={it.step} unit={it.unit} onChange={onChange} />
-      {undoing && <UndoButton compact onUndo={onUndo} onExpire={onExpire} label="Undo" />}
       <button className="btn btn-ghost flex h-8 w-8 shrink-0 items-center justify-center !p-0" aria-label={`Add ${titleCase(it.name)} to the list`} title="Add to the shopping list" onClick={onList}><ShoppingCart size={17} /></button>
-      {!out && !undoing && <button className="btn btn-ghost flex h-8 w-8 shrink-0 items-center justify-center !p-0" aria-label={`Mark ${titleCase(it.name)} as out`} title="Mark as out" onClick={onOut}><PackageX size={17} /></button>}
     </div>
   );
 }
@@ -50,10 +55,10 @@ export function PantryPage() {
   const [open, setOpen] = useState<Item | null>(null);
   const [outed, setOuted] = useState<Record<number, number>>({}); // item id -> how much there was, while Undo is on offer
   const toList = useAddToList(reload);
-  const view3d = useStore((st) => st.settings.view3d);
-  const [mode, setMode] = useState<'list' | 'kitchen'>(() => { try { return localStorage.getItem('turbopantry.pantryView') === 'kitchen' ? 'kitchen' : 'list'; } catch { return 'list'; } });
-  const pick = (m: 'list' | 'kitchen') => { setMode(m); try { localStorage.setItem('turbopantry.pantryView', m); } catch { /* not saved */ } };
-  const kitchen = view3d && mode === 'kitchen';
+  const placesOn = useStore((st) => st.settings.showPlaces);
+  // the 3D kitchen is a temporary view: it lasts until the tab is closed, and is never a saved setting
+  const [kitchen, setKitchen] = useState<boolean>(() => { try { return sessionStorage.getItem('turbopantry.pantry3d') === '1'; } catch { return false; } });
+  const pick = (on: boolean) => { setKitchen(on); try { sessionStorage.setItem('turbopantry.pantry3d', on ? '1' : '0'); } catch { /* not kept */ } };
   const [params] = useSearchParams();
   const focus = Number(params.get('item')) || null;
   const [show, setShow] = useState<{ have: boolean; out: boolean }>(() => { try { const f = JSON.parse(localStorage.getItem('turbopantry.pantryFilter') ?? '{}') as { have?: boolean; out?: boolean }; return { have: f.have ?? true, out: f.out ?? true }; } catch { return { have: true, out: true }; } });
@@ -113,14 +118,9 @@ export function PantryPage() {
     <div className="space-y-2 pb-4">
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-bold md:text-2xl">Pantry</h1>
-        {view3d && (
-          <div role="radiogroup" aria-label="Pantry view" className="grid grid-flow-col gap-1 rounded-theme border border-line bg-raised p-1">
-            <button role="radio" aria-checked={!kitchen} className={`flex min-h-[2.5rem] items-center gap-1.5 rounded-theme px-3 text-sm font-medium ${!kitchen ? 'bg-accent text-accent-fg' : 'text-muted'}`} onClick={() => pick('list')}><ListIcon size={16} />List</button>
-            <button role="radio" aria-checked={kitchen} className={`flex min-h-[2.5rem] items-center gap-1.5 rounded-theme px-3 text-sm font-medium ${kitchen ? 'bg-accent text-accent-fg' : 'text-muted'}`} onClick={() => pick('kitchen')}><Box size={16} />Kitchen</button>
-          </div>
-        )}
+        <button className="btn flex h-10 items-center gap-1.5 px-3" onClick={() => pick(true)}><Box size={16} />3D kitchen</button>
       </div>
-      {kitchen && <Kitchen3D items={items} onChange={(it, qty) => void change(it, qty)} onOut={(it) => void out(it)} onList={(it) => void toList.add(it)} />}
+      {kitchen && <Kitchen3D onClose={() => pick(false)} items={items} onChange={(it, qty) => void change(it, qty)} onOut={(it) => void out(it)} onList={(it) => void toList.add(it)} />}
       {!kitchen && <form className="find-bar sticky top-14 z-10 -mx-1 flex gap-2 px-1 py-1.5 backdrop-blur md:top-16" onSubmit={(e) => { e.preventDefault(); if (!exact) void add(); }}>
         <input className="input find-box h-11 flex-1 text-base" placeholder="Find or add: milk, 2kg flour…" aria-label="Find or add an item" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="done" autoCapitalize="none" />
         {text && !exact && <button className="btn btn-accent h-11 px-4" aria-label={`Add ${text}`}><Plus size={20} /></button>}
@@ -161,7 +161,7 @@ export function PantryPage() {
           <div className="card divide-y divide-line overflow-hidden">
             {rows.map((it) => (
               <Row key={it.id} it={it} undoing={it.id in outed} onOpen={() => setOpen(it)} onChange={(v) => void change(it, v)} onOut={() => void out(it)} onUndo={() => void undoOut(it)} onExpire={() => expire(it.id)}
-                onList={() => void toList.add(it)} onMore={() => nav(`/settings?tab=items&item=${it.id}`)} onDelete={() => void del(it)} highlight={focus === it.id} />
+                onList={() => void toList.add(it)} onMore={() => nav(`/settings?tab=items&item=${it.id}`)} onDelete={() => void del(it)} highlight={focus === it.id} placeOn={placesOn} />
             ))}
           </div>
         </section>
