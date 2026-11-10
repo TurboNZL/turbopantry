@@ -9,6 +9,8 @@ export interface Kitchen3DProps {
   onOut(item: Item): void;
   /** Put an item on the shopping list. */
   onList(item: Item): void;
+  /** Close the 3D view. */
+  onClose(): void;
 }
 
 export interface StoreMap3DProps {
@@ -16,4 +18,5 @@ export interface StoreMap3DProps {
   /** The shopping list lines (ticked ones are ignored). */
   entries: ListEntry[];
   items: Item[];
+  onClose(): void;
 }

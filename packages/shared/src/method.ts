@@ -1,4 +1,4 @@
-import { canonicalUnit, formatQuantity, parseIngredient, unitLabel } from './ingredient.ts';
+import { canonicalUnit, formatQuantity, parseIngredient, parseQuantity, unitLabel } from './ingredient.ts';
 import type { Ingredient } from './recipe.ts';
 
 /** One piece of a method step. `bold` pieces are ingredient names the step mentions. */
@@ -85,3 +85,24 @@ export function highlightStep(step: string, ingredients: Ingredient[], opts: { h
 }
 
 export { canonicalUnit };
+
+export interface TimeSpan { start: number; end: number; seconds: number }
+
+const T_NUM = String.raw`\d+(?:[.,]\d+)?|\d+\s*[¼½¾⅓⅔⅛]|[¼½¾⅓⅔⅛]|\d+\s+\d+\/\d+|\d+\/\d+`;
+const T_UNIT_H = String.raw`hours?|hrs?`, T_UNIT_M = String.raw`minutes?|mins?`, T_UNIT_S = String.raw`seconds?|secs?`;
+const TIME_RE = new RegExp(String.raw`\b(?:(${T_NUM})\s*(${T_UNIT_H})\s*(?:and\s*)?(${T_NUM})\s*(${T_UNIT_M})|(${T_NUM})(?:\s*(?:-|–|—|to)\s*(${T_NUM}))?\s*(${T_UNIT_H}|${T_UNIT_M}|${T_UNIT_S}))\b`, 'gi');
+const num = (t: string): number => { const v = parseQuantity(t.replace(',', '.')); return v ?? 0; };
+const unitSeconds = (u: string): number => (/^h/i.test(u) ? 3600 : /^m/i.test(u) ? 60 : 1);
+
+/**
+ * Time periods written in a method step ("20 minutes", "1 hour 30 minutes", "10-15 min", "1½ hours", "45 seconds"), with where they sit in the text and how many
+ * seconds they are. A range counts as its upper end. Only whole words with a time unit match, so "5 g" or "2 tablespoons" never do.
+ */
+export function findTimes(text: string): TimeSpan[] {
+  const out: TimeSpan[] = [];
+  for (const m of text.matchAll(TIME_RE)) {
+    const seconds = m[1] !== undefined ? num(m[1]) * 3600 + num(m[3]!) * 60 : Math.max(num(m[5]!), m[6] ? num(m[6]) : 0) * unitSeconds(m[7]!);
+    if (seconds >= 1 && seconds <= 48 * 3600) out.push({ start: m.index, end: m.index + m[0].length, seconds: Math.round(seconds) });
+  }
+  return out;
+}

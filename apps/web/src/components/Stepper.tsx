@@ -19,14 +19,15 @@ export function Stepper({ value, step, unit, onChange, min = 0, max, className, 
   };
   const u = unitLabel(unit, value);
   const btn = compact ? 'h-8 w-8' : 'h-11 w-11';
+  const w = compact ? 'w-[6.5rem]' : 'w-[7.5rem]';
   // the number and the unit have the same width whatever the unit is, so rows line up
   return (
-    <div className={cn('inline-flex items-center', compact ? 'gap-0' : 'gap-0.5', className)} role="group" aria-label={label}>
+    <div className={cn('inline-flex shrink-0 items-center justify-between', w, className)} role="group" aria-label={label}>
       <button type="button" className={cn('btn btn-ghost flex shrink-0 items-center justify-center !p-0', btn)} aria-label={`Less ${label}`} onClick={() => onChange(clamp(value - step))} disabled={value <= min}><Minus size={compact ? 16 : 18} /></button>
-      <span className="flex flex-col items-center">
-        <input className={cn('rounded-md border border-transparent bg-transparent text-center text-sm font-semibold tabular-nums hover:border-line focus:border-accent focus:outline-none', compact ? 'w-12 py-0 leading-5' : 'w-14 py-0.5')} inputMode="decimal" aria-label={`${label} amount`}
+      <span className="flex min-w-0 flex-1 flex-col items-center">
+        <input className={cn('rounded-md border border-transparent bg-transparent text-center text-sm font-semibold tabular-nums hover:border-line focus:border-accent focus:outline-none', compact ? 'w-full py-0 leading-5' : 'w-full py-0.5')} inputMode="decimal" aria-label={`${label} amount`}
           value={text} onFocus={(e) => { setEditing(true); e.currentTarget.select(); }} onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setEditing(false); setText(formatQuantity(value) || '0'); e.currentTarget.blur(); } }} />
-        {u && <span className={cn('block max-w-full truncate text-center text-[10px] leading-3 text-muted', compact ? 'w-12' : 'w-14')} title={u} aria-hidden>{u}</span>}
+        {u && <span className={cn('block max-w-full truncate text-center text-[10px] leading-3 text-muted', 'w-full')} title={u} aria-hidden>{u}</span>}
       </span>
       <button type="button" className={cn('btn btn-ghost flex shrink-0 items-center justify-center !p-0', btn)} aria-label={`More ${label}`} onClick={() => onChange(clamp(value + step))} disabled={max !== undefined && value >= max}><Plus size={compact ? 16 : 18} /></button>
     </div>

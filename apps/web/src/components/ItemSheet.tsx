@@ -58,7 +58,7 @@ export function ItemSheet({ item, onClose, onSaved }: { item: Item; onClose(): v
       {mode === 'chunks' && <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">One chunk is</span><Stepper label="chunk" value={step} step={unit === 'kg' || unit === 'l' ? 0.25 : 50} unit={unit} min={0.001} onChange={(v) => { setStep(v); setDefaultQty(v); }} /></div>}
       <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-sm font-medium">Usual amount to buy</span>
         <span className="flex items-center gap-1">
-          <Stepper compact label="usual amount" value={defaultQty} step={step} unit={null} onChange={setDefaultQty} />
+          <Stepper compact label="usual amount" value={defaultQty} step={step} unit={null} onChange={(v) => { if (step === defaultQty) setStep(v); setDefaultQty(v); }} />
           <Select className="h-10 min-w-[7rem] !py-0 text-sm" aria-label="Measured in" value={unit ?? ''} onChange={(v) => setUnit(v || null)} options={(mode === 'amount' ? COUNT_UNIT_OPTIONS : WEIGHT_UNIT_OPTIONS).map(([value, label]) => ({ value, label }))} />
         </span></div>
       <label className="flex min-h-[2.75rem] cursor-pointer items-start gap-3"><input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0" checked={essential} onChange={(e) => setEssential(e.target.checked)} />

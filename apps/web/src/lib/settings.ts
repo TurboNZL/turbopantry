@@ -11,10 +11,10 @@ export interface DeviceSettings {
   showQuantities: boolean;
   /** Recipes: how amounts are shown. "original" as written, "metric-cups" (oz and lb become g, cups stay), "metric-grams" (and cups of flour, sugar, butter, oats become g). */
   unitMode: 'original' | 'metric-cups' | 'metric-grams';
-  /** Show the faux-3D kitchen and shop maps (off = nothing 3D is even loaded). */
-  view3d: boolean;
-  /** The shopping list's Store view as a 3D map (its own switch: the kitchen view and this one are independent). */
-  listMap3d: boolean;
+  /** Easy mode: the simplest screens (big controls, few choices, advanced things hidden). Off by default. */
+  easyMode: boolean;
+  /** Pantry rows show where an item is kept (opt-in; the kitchen view uses places either way). */
+  showPlaces: boolean;
   /** Android app only, opt-in: a notification when someone else changes the shopping list. */
   listNotifications: boolean;
   /** Shopping: the shop layout the list is ordered by (null = the default order). */
@@ -31,7 +31,7 @@ export interface DeviceSettings {
 
 export const DEFAULT_SETTINGS: DeviceSettings = {
   theme: 'auto', ui: 'auto', layout: 'side', glass: 'regular', wallpaper: false, wallpaperCustom: false, wallpaperDarkness: 0.35,
-  showQuantities: true, unitMode: 'original', storeId: null, view3d: false, listMap3d: false, listNotifications: false, themeUpdates: true, themesToken: '', serverUrl: '', token: '', cfAccessId: '', cfAccessSecret: '',
+  showQuantities: true, unitMode: 'original', storeId: null, showPlaces: false, easyMode: false, listNotifications: false, themeUpdates: true, themesToken: '', serverUrl: '', token: '', cfAccessId: '', cfAccessSecret: '',
 };
 
 const KEY = 'turbopantry.settings';
@@ -39,8 +39,7 @@ const KEY = 'turbopantry.settings';
 export function loadSettings(): DeviceSettings {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<DeviceSettings>;
-    // before the shop map had its own switch it followed the kitchen one: keep what a device already had
-    return { ...DEFAULT_SETTINGS, ...(saved.listMap3d === undefined && saved.view3d ? { listMap3d: true } : {}), ...saved };
+    return { ...DEFAULT_SETTINGS, ...saved };
   }
   catch { return { ...DEFAULT_SETTINGS }; }
 }

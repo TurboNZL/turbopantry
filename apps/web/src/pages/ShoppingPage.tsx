@@ -7,13 +7,31 @@ import { Stepper } from '../components/Stepper.tsx';
 import { StoreMap3D } from '../components/floor3d/index.tsx';
 import { useAddToList } from '../components/useAddToList.tsx';
 import { useRowMenu } from '../lib/contextMenu.tsx';
+import { useClicks } from '../lib/clicks.ts';
+import { EasyLineSheet } from '../components/EasySheets.tsx';
+import { useEasy } from '../lib/easy.ts';
 import { useItems, useListEntries, useStores } from '../lib/data.ts';
 import { useStore } from '../lib/store.ts';
 import { toast } from '../lib/toast.ts';
 import { useApi } from '../lib/useApi.ts';
-import { Segmented } from '../components/Segmented.tsx';
 import { Select } from '../components/Select.tsx';
 import { cn } from '../lib/cn.ts';
+
+/** Easy mode: a big round tick on the left crosses it off; tapping the rest opens the few choices. */
+function EasyLine({ e, leaving, onBuy, onOpen }: { e: ListEntry; leaving: 'tick' | 'fold' | null; onBuy(): void; onOpen(): void }) {
+  return (
+    <div className={cn('overflow-hidden transition-[max-height,opacity] duration-300 ease-out', leaving === 'fold' ? 'max-h-0 opacity-0' : 'max-h-20 opacity-100')}>
+      <div className={cn('flex min-h-[3.75rem] items-center gap-1 pl-1 pr-3 transition-colors', leaving && 'bg-good/10')}>
+        <button className="flex h-14 w-14 shrink-0 items-center justify-center" aria-label={`Cross off ${titleCase(e.name)}`} disabled={!!leaving} onClick={onBuy}>
+          <span className={cn('flex h-8 w-8 items-center justify-center rounded-full border-2', leaving ? 'border-good bg-good text-white' : 'border-muted')}>{leaving && <Check size={18} strokeWidth={3} />}</span></button>
+        <button className="flex min-h-[3.75rem] min-w-0 flex-1 items-center justify-between gap-3 text-left" onClick={onOpen} disabled={!!leaving} aria-label={`${titleCase(e.name)}. Tap for choices`}>
+          <span className={cn('min-w-0 truncate text-lg font-medium', leaving && 'text-muted line-through')}>{titleCase(e.name)}</span>
+          {e.qty !== null && <span className="shrink-0 text-base tabular-nums text-muted">{formatStock(e.qty, e.unit)}</span>}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 const LEAVE_MS = 340; // how long a crossed-off line shows its tick before it folds away
 
@@ -26,22 +44,23 @@ const TONE = {
 } as const;
 
 /** One list line, one row high: tap the name to cross it off (it goes into the pantry), the red bin takes it off the list WITHOUT adding it to the pantry. */
-function Line({ e, leaving, onBuy, onView, onQty, onRemove, onOut }: { e: ListEntry; leaving: 'tick' | 'fold' | null; onBuy(): void; onView(): void; onQty(v: number): void; onRemove(): void; onOut(): void }) {
+function Line({ e, leaving, canOut, onBuy, onView, onQty, onRemove, onOut }: { e: ListEntry; canOut: boolean; leaving: 'tick' | 'fold' | null; onBuy(): void; onView(): void; onQty(v: number): void; onRemove(): void; onOut(): void }) {
   const menu = useRowMenu(titleCase(e.name), () => [
     { label: 'Cross off (bought)', icon: <Check size={16} />, run: onBuy },
     { label: 'View in the pantry', icon: <Package size={16} />, run: onView },
-    { label: 'I’m out of it', icon: <PackageX size={16} />, run: onOut },
+    ...(canOut ? [{ label: 'I’m out of it', icon: <PackageX size={16} />, run: onOut }] : []),
     { label: 'Remove, not bought', icon: <Trash2 size={16} />, danger: true, run: onRemove },
   ]);
+  const clicks = useClicks(onBuy, onView); // click crosses it off, a double click (mouse) opens it in the pantry
   return (
     <div className={cn('overflow-hidden transition-[max-height,opacity] duration-300 ease-out', leaving === 'fold' ? 'max-h-0 opacity-0' : 'max-h-12 opacity-100')}>
       <div {...menu} className={cn('flex h-11 items-center gap-0.5 pl-3 pr-1 transition-colors duration-200', leaving && 'bg-good/10')}>
-        <button className="flex h-11 min-w-0 flex-1 items-center gap-1.5 text-left text-[15px]" onClick={onBuy} disabled={!!leaving} aria-label={`Cross off ${titleCase(e.name)}`}>
+        <button className="flex h-11 min-w-0 flex-1 items-center gap-1.5 text-left text-[15px]" {...clicks} title="Tap: cross off · double-click: open in the pantry" disabled={!!leaving} aria-label={`Cross off ${titleCase(e.name)}`}>
           {leaving && <Check size={16} strokeWidth={3} className="shrink-0 text-good" />}
           <span className={cn('truncate font-medium transition-colors duration-200', leaving && 'text-muted line-through')}>{titleCase(e.name)}{e.note && <span className="ml-1.5 text-xs font-normal text-muted">{e.note}</span>}</span>
         </button>
-        {e.qty !== null && !leaving && <Stepper compact label={titleCase(e.name)} value={e.qty} step={e.step} unit={e.unit} onChange={onQty} />}
-        {!leaving && <button className="flex h-8 w-8 shrink-0 items-center justify-center rounded-theme bg-bad/15 text-bad" aria-label={`Remove ${titleCase(e.name)} from the list without adding it to the pantry`} title="Remove, not bought" onClick={onRemove}><Trash2 size={16} /></button>}
+        {e.qty !== null && !leaving ? <Stepper compact label={titleCase(e.name)} value={e.qty} step={e.step} unit={e.unit} onChange={onQty} /> : <span className="w-[6.5rem] shrink-0" aria-hidden />}
+        {!leaving ? <button className="flex h-8 w-8 shrink-0 items-center justify-center rounded-theme bg-bad/15 text-bad" aria-label={`Remove ${titleCase(e.name)} from the list without adding it to the pantry`} title="Remove, not bought" onClick={onRemove}><Trash2 size={16} /></button> : <span className="w-8 shrink-0" aria-hidden />}
       </div>
     </div>
   );
@@ -80,14 +99,18 @@ export function ShoppingPage() {
   const { settings, updateSettings } = useStore();
   const [q, setQ] = useState('');
   const [view, setView] = useState<'list' | 'pantry'>('list');
-  const [show, setShow] = useState<'list' | 'map'>(() => { try { return localStorage.getItem('turbopantry.shoppingView') === 'map' ? 'map' : 'list'; } catch { return 'list'; } });
-  const pickShow = (v: 'list' | 'map') => { setShow(v); try { localStorage.setItem('turbopantry.shoppingView', v); } catch { /* not saved */ } };
+  // the 3D shop map is a temporary view: it lasts until the tab is closed, and is never a saved setting
+  const [map, setMapOn] = useState<boolean>(() => { try { return sessionStorage.getItem('turbopantry.shop3d') === '1'; } catch { return false; } });
+  const pickMap = (on: boolean) => { setMapOn(on); try { sessionStorage.setItem('turbopantry.shop3d', on ? '1' : '0'); } catch { /* not kept */ } };
   const nav = useNavigate();
   const [leaving, setLeaving] = useState<Record<number, 'tick' | 'fold'>>({});
   const toList = useAddToList(() => { reload(); reloadItems(); });
+  const easy = useEasy();
+  const [easyOpen, setEasyOpen] = useState<ListEntry | null>(null);
 
-  const store = stores.find((s) => s.id === settings.storeId) ?? null;
-  const map = show === 'map' && stores.length > 0;
+  const chosen = stores.find((s) => s.id === settings.storeId) ?? null;
+  const store = chosen ?? (map ? stores[0] ?? null : null); // the map needs a store: without a chosen one it opens the first
+  const showMap = map && !!store && !easy;
   const order = groupOrder(store);
   const onList = useMemo(() => new Set(entries.map((e) => e.itemId).filter((x): x is number => x !== null)), [entries]);
   const text = q.trim();
@@ -146,16 +169,13 @@ export function ShoppingPage() {
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-bold md:text-2xl">Shopping</h1>
         <div className="flex items-center gap-2">
-          {stores.length > 0 && <Segmented<'list' | 'map'> label="Shopping view" value={show} onChange={pickShow} options={[{ value: 'list', label: 'List' }, { value: 'map', label: 'Store' }]} />}
-          {stores.length > 0 && <label className="flex items-center gap-1.5 text-sm"><StoreIcon size={16} className="text-muted" aria-hidden /><span className="sr-only">Store</span>
+          {stores.length > 0 && !easy && <button className="btn flex h-9 items-center gap-1.5 px-3" onClick={() => pickMap(true)}><MapIcon size={16} />3D map</button>}
+          {stores.length > 0 && !easy && <label className="flex items-center gap-1.5 text-sm"><StoreIcon size={16} className="text-muted" aria-hidden /><span className="sr-only">Store</span>
             <Select className="h-9 w-32 min-w-0 !py-0" aria-label="Store" value={settings.storeId ? String(settings.storeId) : ''} onChange={(v) => updateSettings({ storeId: v ? Number(v) : null })} options={[{ value: '', label: 'Standard order' }, ...stores.map((s) => ({ value: String(s.id), label: s.name }))]} /></label>}
         </div>
       </div>
-      {map ? (
-        !settings.listMap3d ? <div className="card space-y-2 p-5 text-center"><p className="font-medium">The store view is a 3D map</p><p className="text-sm text-muted">Turn on the shop map to see what to grab in each part of the shop.</p><button className="btn btn-accent h-11 px-4" onClick={() => updateSettings({ listMap3d: true })}>Turn on the shop map</button></div>
-        : !store ? <div className="card p-5 text-center text-sm text-muted">Pick a store above to see its map.</div>
-        : <StoreMap3D store={store} entries={entries} items={items} />
-      ) : <>
+      {showMap && <StoreMap3D store={store!} entries={entries} items={items} onClose={() => pickMap(false)} />}
+      {!showMap && <>
       <form className="find-bar sticky top-14 z-10 -mx-1 px-1 py-1.5 backdrop-blur md:top-16" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
         <div className="flex gap-2">
           <input className="input find-box h-11 flex-1 text-base" placeholder={view === 'pantry' ? 'Search the pantry' : 'Add: milk, 750 ch, 2kg flour…'} aria-label={view === 'pantry' ? 'Search the pantry' : 'Add to the list'} value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="done" autoCapitalize="none" />
@@ -194,12 +214,13 @@ export function ShoppingPage() {
           <section key={c} className="space-y-0.5" aria-label={c}>
             <h2 className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted">{c}</h2>
             <div className="card divide-y divide-line overflow-hidden">
-              {rows.map((e) => <Line key={e.id} e={e} leaving={leaving[e.id] ?? null} onBuy={() => cross(e)} onView={() => nav(`/pantry?item=${e.itemId}`)} onQty={(v) => void step(e, v)} onRemove={() => void remove(e)} onOut={() => void markOut(e)} />)}
+              {rows.map((e) => easy ? <EasyLine key={e.id} e={e} leaving={leaving[e.id] ?? null} onBuy={() => cross(e)} onOpen={() => setEasyOpen(e)} /> : <Line key={e.id} e={e} canOut={!!e.itemId && (items.find((i) => i.id === e.itemId)?.qty ?? 0) > 0} leaving={leaving[e.id] ?? null} onBuy={() => cross(e)} onView={() => nav(`/pantry?item=${e.itemId}`)} onQty={(v) => void step(e, v)} onRemove={() => void remove(e)} onOut={() => void markOut(e)} />)}
             </div>
           </section>
         ))}
       </>}
       </>}
+      {easyOpen && entries.find((x) => x.id === easyOpen.id) && <EasyLineSheet entry={entries.find((x) => x.id === easyOpen.id)!} canOut={false} onClose={() => setEasyOpen(null)} onQty={(v) => void step(easyOpen, v)} onBuy={() => cross(easyOpen)} onRemove={() => void remove(easyOpen)} onView={() => nav(`/pantry?item=${easyOpen.itemId}`)} />}
       {toList.node}
     </div>
   );

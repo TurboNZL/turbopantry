@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { MapPinOff, Pencil, PackageX, Plus, Search, ShoppingCart, Sofa } from 'lucide-react';
-import { placeOf, searchItems, starterKitchen, titleCase, FLOOR, type Block, type Item, type Layout } from '@turbopantry/shared';
+import { MapPinOff, PackageX, Plus, Search, ShoppingCart } from 'lucide-react';
+import { placeOf, searchItems, titleCase, FLOOR, footprint, type Block, type Item } from '@turbopantry/shared';
 import { useLayout } from '../../lib/useLayout.ts';
 import { useApi } from '../../lib/useApi.ts';
 import { toast } from '../../lib/toast.ts';
@@ -8,23 +8,23 @@ import { cn } from '../../lib/cn.ts';
 import { Sheet } from '../Sheet.tsx';
 import { Select } from '../Select.tsx';
 import { Stepper } from '../Stepper.tsx';
-import { CameraPad } from './CameraPad.tsx';
+import { CELL } from './camera.ts';
 import { useCamera } from './camera.ts';
-import { LayoutEditor } from './LayoutEditor.tsx';
 import { Scene3D, type BlockInfo } from './Scene3D.tsx';
+import { Stage3D } from './Stage3D.tsx';
 import type { Kitchen3DProps } from './types.ts';
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 const isOut = (i: Item) => i.qty <= 0;
 const isLow = (i: Item) => i.minQty > 0 && i.qty <= i.minQty;
 
-/** The kitchen as a 3D plan: each block is a place (fridge, cupboard...), tap it to see and change what is kept there. */
-export function Kitchen3DImpl({ items, onChange, onOut, onList }: Kitchen3DProps) {
+/** The kitchen as a full-screen 3D view: tap a place (or pick it in the panel) to zoom in and see what is kept there, with the same buttons as the pantry list. */
+export function Kitchen3DImpl({ items, onChange, onOut, onList, onClose }: Kitchen3DProps) {
   const api = useApi();
-  const { layout, loaded, save } = useLayout('pantry');
+  const { layout, loaded } = useLayout('pantry');
   const cam = useCamera();
-  const [editing, setEditing] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [drawer, setDrawer] = useState(false);
   const [elsewhere, setElsewhere] = useState(false);
   const [adding, setAdding] = useState(false);
   const [q, setQ] = useState('');
@@ -49,57 +49,44 @@ export function Kitchen3DImpl({ items, onChange, onOut, onList }: Kitchen3DProps
     return m;
   }, [layout.blocks, byBlock]);
 
-  const places = useMemo(() => layout.blocks.filter((b) => placeOf(b)).map((b) => ({ id: b.id, name: placeOf(b)! })), [layout.blocks]);
+  const placed = useMemo(() => layout.blocks.filter((b) => placeOf(b)), [layout.blocks]);
+  const places = useMemo(() => placed.map((b) => ({ id: b.id, name: placeOf(b)! })), [placed]);
   const open = layout.blocks.find((b) => b.id === openId) ?? null;
-
-  /** Saves the plan, and when a block was renamed the things kept in it move to the new name (a place IS its name). A cleared name moves nothing, so retyping one cannot lose them. */
-  async function saveRenaming(next: Layout) {
-    const before = layout;
-    void save(next);
-    const taken = new Set(next.blocks.map((b) => norm(placeOf(b))));
-    for (const nb of next.blocks) {
-      const ob = before.blocks.find((b) => b.id === nb.id);
-      const from = ob ? placeOf(ob) : null, to = placeOf(nb);
-      if (!from || !to || norm(from) === norm(to) || taken.has(norm(from))) continue; // another block still has the old name: it keeps them
-      for (const it of items.filter((i) => norm(i.place) === norm(from))) await api.updateItem(it.id, { place: to }).catch(() => undefined);
-    }
-  }
+  const SIZE = FLOOR.pantry * CELL;
+  const pick = (id: string | null) => {
+    const b = id ? layout.blocks.find((x) => x.id === id) : undefined;
+    if (!b || !placeOf(b)) { setOpenId(null); return; }
+    setOpenId(b.id); setDrawer(true);
+    const f = footprint(b);
+    cam.closeUp((b.x + f.w / 2) * CELL - SIZE / 2, (b.y + f.d / 2) * CELL - SIZE / 2); // come in close on the place
+  };
 
   async function setPlace(item: Item, place: string | null) {
     try { await api.updateItem(item.id, { place }); toast(place ? `${titleCase(item.name)} is in ${place}` : `${titleCase(item.name)} has no place now`); } catch (e) { toast((e as Error).message); }
   }
 
-  if (!loaded) return <div className="card p-8 text-center text-sm text-muted" role="status">Loading the kitchen…</div>;
-  if (editing) return <LayoutEditor kind="pantry" layout={layout} cam={cam} onSave={(l) => void saveRenaming(l)} onDone={() => setEditing(false)} />;
-
-  if (!layout.blocks.length) return (
-    <div className="card space-y-3 p-6 text-center">
-      <Sofa size={32} className="mx-auto text-muted" aria-hidden />
-      <h2 className="font-semibold">Build your kitchen</h2>
-      <p className="text-sm text-muted">Put your fridge, freezer and cupboards on a little 3D floor plan. Then tap one to see what is inside.</p>
-      <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
-        <button className="btn btn-accent h-11 px-4" onClick={() => void save(starterKitchen())}>Start with a simple kitchen</button>
-        <button className="btn h-11 px-4" onClick={() => setEditing(true)}>Build my own</button>
+  const panel = !loaded ? <p className="p-4 text-sm text-muted">Loading the kitchen…</p> : (
+    <div>
+      <div className="border-b border-line p-3"><h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Places</h3>
+        {!placed.length ? <p className="mt-1 text-sm text-muted">No places yet. Build your kitchen in Settings › Kitchen.</p> : (
+          <ul className="mt-1 space-y-1">
+            {placed.map((b) => { const n = byBlock.get(b.id)?.length ?? 0, bad = info.get(b.id)?.tone === 'warn' ? info.get(b.id)!.badge : 0;
+              return <li key={b.id}><button className={cn('flex min-h-[2.75rem] w-full items-center justify-between gap-2 rounded-theme border px-3 text-left', openId === b.id ? 'border-accent bg-accent/10' : 'border-line')} aria-pressed={openId === b.id} onClick={() => pick(b.id)}>
+                <span className="min-w-0 truncate font-medium">{titleCase(placeOf(b)!)}</span>
+                <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted">{bad ? <b className="rounded-full bg-warn px-1.5 py-0.5 text-white">{bad} low</b> : null}{n}</span></button></li>; })}
+          </ul>)}
+        {other.length > 0 && <button className="chip mt-2 inline-flex min-h-[2.5rem] items-center gap-1.5 px-3" onClick={() => setElsewhere(true)}>Elsewhere<span className="font-semibold">{other.length}</span></button>}
       </div>
+      {open && placeOf(open) ? <PlaceItems block={open} name={placeOf(open)!} list={byBlock.get(open.id) ?? []} onChange={onChange} onOut={onOut} onList={onList} onTakeOut={(it) => void setPlace(it, null)} onAdd={() => { setQ(''); setAdding(true); }} />
+        : placed.length > 0 && <p className="p-4 text-sm text-muted">Pick a place here, or tap one in the view, to see what is kept in it.</p>}
     </div>
   );
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <button className="btn flex h-11 items-center gap-1.5 px-3" onClick={() => setEditing(true)}><Pencil size={16} />Edit layout</button>
-        <span className="flex-1" />
-        {other.length > 0 && <button className="chip inline-flex min-h-[2.75rem] items-center gap-1.5 px-3" onClick={() => setElsewhere(true)}>Elsewhere<span className="font-semibold">{other.length}</span></button>}
-      </div>
-      <Scene3D cam={cam} size={FLOOR.pantry} blocks={layout.blocks} selectedId={openId} info={info} label="Kitchen" onTap={(id) => { const b = layout.blocks.find((x) => x.id === id); setOpenId(b && placeOf(b) ? b.id : null); }} />
-      <CameraPad cam={cam} />
-      <p className="text-center text-xs text-muted">Tap a place (or its name tag) to see what is in it; tap it again to pick the one behind. Orange numbers are things that are low or out.</p>
-
-      {open && !adding && (
-        <PlaceSheet block={open} name={placeOf(open) ?? open.label} list={byBlock.get(open.id) ?? []} onClose={() => setOpenId(null)} onChange={onChange} onOut={onOut} onList={onList}
-          onTakeOut={(it) => void setPlace(it, null)} onAdd={() => { setQ(''); setAdding(true); }} />
-      )}
-      {open && adding && (
+    <Stage3D title="Kitchen" cam={cam} onClose={onClose} panel={panel} drawer={drawer} onDrawer={setDrawer}>
+      {!loaded ? <div className="flex h-full items-center justify-center text-sm text-muted" role="status">Loading the kitchen…</div>
+        : <Scene3D fill cam={cam} size={FLOOR.pantry} blocks={layout.blocks} selectedId={openId} info={info} label="Kitchen" onTap={pick} />}
+      {adding && open && (
         <Sheet title={`Keep in ${placeOf(open)}`} onClose={() => setAdding(false)} footer={<button className="btn h-11 w-full" onClick={() => setAdding(false)}>Back</button>}>
           <label className="relative block"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden /><input className="input h-11 w-full pl-9" placeholder="Find an item" aria-label="Find an item" value={q} onChange={(e) => setQ(e.target.value)} autoFocus /></label>
           <Candidates open={open} tracked={tracked} byBlock={byBlock} q={q} onPick={(it) => { void setPlace(it, placeOf(open)); setAdding(false); }} />
@@ -108,7 +95,7 @@ export function Kitchen3DImpl({ items, onChange, onOut, onList }: Kitchen3DProps
       {elsewhere && (
         <Sheet title="Elsewhere" onClose={() => setElsewhere(false)}>
           <p className="text-sm text-muted">These have no place, or a place that is not on your plan. Choose where each one lives.</p>
-          {!places.length && <p className="text-sm text-muted">Add a fridge, cupboard or shelf to your plan first.</p>}
+          {!places.length && <p className="text-sm text-muted">Add a fridge, cupboard or shelf in Settings › Kitchen first.</p>}
           <ul className="divide-y divide-line overflow-hidden rounded-theme border border-line">
             {other.map((it) => (
               <li key={it.id} className="flex items-center justify-between gap-2 px-3 py-2">
@@ -119,7 +106,7 @@ export function Kitchen3DImpl({ items, onChange, onOut, onList }: Kitchen3DProps
           </ul>
         </Sheet>
       )}
-    </div>
+    </Stage3D>
   );
 }
 
@@ -147,28 +134,30 @@ function Candidates({ open, tracked, byBlock, q, onPick }: { open: Block; tracke
   );
 }
 
-function PlaceSheet({ block, name, list, onClose, onChange, onOut, onList, onTakeOut, onAdd }: { block: Block; name: string; list: Item[]; onClose(): void; onChange: Kitchen3DProps['onChange']; onOut: Kitchen3DProps['onOut']; onList: Kitchen3DProps['onList']; onTakeOut(i: Item): void; onAdd(): void }) {
+function PlaceItems({ block, name, list, onChange, onOut, onList, onTakeOut, onAdd }: { block: Block; name: string; list: Item[]; onChange: Kitchen3DProps['onChange']; onOut: Kitchen3DProps['onOut']; onList: Kitchen3DProps['onList']; onTakeOut(i: Item): void; onAdd(): void }) {
   const sorted = [...list].sort((a, b) => Number(isOut(b) || isLow(b)) - Number(isOut(a) || isLow(a)) || a.name.localeCompare(b.name));
   return (
-    <Sheet title={titleCase(name)} onClose={onClose} footer={<button className="btn flex h-11 w-full items-center justify-center gap-1.5" onClick={onAdd}><Plus size={18} />Keep something here</button>}>
-      {!sorted.length ? <p className="py-4 text-center text-sm text-muted">Nothing is kept in the {name.toLowerCase()} yet.{block.kind === 'wall' ? '' : ' Use the button below to move items here.'}</p> : (
+    <div className="space-y-2 p-3">
+      <h3 className="text-base font-semibold">{titleCase(name)}</h3>
+      {!sorted.length ? <p className="py-2 text-sm text-muted">Nothing is kept in the {name.toLowerCase()} yet.{block.kind === 'wall' ? '' : ' Use the button below to move items here.'}</p> : (
         <ul className="divide-y divide-line overflow-hidden rounded-theme border border-line">
           {sorted.map((it) => (
             <li key={it.id} className="space-y-1 px-3 py-2">
               <div className="flex items-baseline justify-between gap-2"><span className="min-w-0 truncate font-medium">{titleCase(it.name)}</span>
                 {(isOut(it) || isLow(it)) && <span className={cn('shrink-0 text-xs font-semibold', isOut(it) ? 'text-bad' : 'text-warn')}>{isOut(it) ? 'out' : 'running low'}</span>}</div>
               <div className="flex items-center justify-between gap-1">
-                <Stepper compact label={titleCase(it.name)} value={it.qty} step={it.step} unit={it.unit} onChange={(v) => onChange(it, v)} />
-                <span className="flex shrink-0">
-                  <button className="btn btn-ghost flex h-10 w-10 items-center justify-center !p-0" aria-label={`Mark ${titleCase(it.name)} as out`} title="Mark as out" disabled={isOut(it)} onClick={() => onOut(it)}><PackageX size={18} /></button>
-                  <button className="btn btn-ghost flex h-10 w-10 items-center justify-center !p-0" aria-label={`Add ${titleCase(it.name)} to the list`} title="Add to the shopping list" onClick={() => onList(it)}><ShoppingCart size={18} /></button>
-                  <button className="btn btn-ghost flex h-10 w-10 items-center justify-center !p-0" aria-label={`${titleCase(it.name)} is not kept here`} title="Not kept here" onClick={() => onTakeOut(it)}><MapPinOff size={18} /></button>
+                <span className="flex shrink-0 items-center">
+                  <button className="btn btn-ghost flex h-8 w-8 items-center justify-center !p-0 disabled:opacity-30" aria-label={`Mark ${titleCase(it.name)} as out`} title="Mark as out" disabled={isOut(it)} onClick={() => onOut(it)}><PackageX size={17} /></button>
+                  <Stepper compact label={titleCase(it.name)} value={it.qty} step={it.step} unit={it.unit} onChange={(v) => onChange(it, v)} />
+                  <button className="btn btn-ghost flex h-8 w-8 items-center justify-center !p-0" aria-label={`Add ${titleCase(it.name)} to the list`} title="Add to the shopping list" onClick={() => onList(it)}><ShoppingCart size={17} /></button>
                 </span>
+                <button className="btn btn-ghost flex h-8 w-8 items-center justify-center !p-0" aria-label={`${titleCase(it.name)} is not kept here`} title="Not kept here" onClick={() => onTakeOut(it)}><MapPinOff size={17} /></button>
               </div>
             </li>
           ))}
         </ul>
       )}
-    </Sheet>
+      <button className="btn flex h-11 w-full items-center justify-center gap-1.5" onClick={onAdd}><Plus size={18} />Keep something here</button>
+    </div>
   );
 }

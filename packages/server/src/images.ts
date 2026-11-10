@@ -37,6 +37,17 @@ export async function cacheImage(dir: string, url: string, fetchPicture: Picture
   } catch { return null; }
 }
 
+/** Saves a photo that was uploaded from a device (the bytes are checked, not the claimed type). Returns its path, or null when the bytes are not a picture. */
+export function saveImageBytes(dir: string, bytes: Buffer): string | null {
+  const kind = sniffImage(bytes);
+  if (!kind) return null;
+  const name = `${createHash('sha256').update(bytes).digest('hex')}.${kind.ext}`;
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, name);
+  if (!existsSync(file)) writeFileSync(file, bytes);
+  return `/images/${name}`;
+}
+
 /** Makes photos already saved (before caching existed) local too, one after another in the background. Returns how many were cached. */
 export async function cacheAllRecipeImages(db: Db, dir: string, fetchPicture: PictureFetcher): Promise<number> {
   const rows = db.prepare("SELECT id, image_url FROM recipes WHERE image_url LIKE 'http%'").all() as { id: number; image_url: string }[];

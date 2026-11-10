@@ -33,7 +33,9 @@ function ensure(s: DeviceSettings): TurboThemes {
 /** Applies the whole look from the device settings. */
 export function applyAppearance(s: DeviceSettings) {
   ensure(s).apply(s as Appearance);
-  document.documentElement.dataset.layout = isLayout(s.layout) ? s.layout : 'side'; // layouts are this app's, not the themes'
+  // layouts are this app's, not the themes'. Easy mode always uses the bottom bar: the same place on every screen, in reach of a thumb
+  document.documentElement.dataset.layout = s.easyMode ? 'dock' : isLayout(s.layout) ? s.layout : 'side';
+  if (s.easyMode) document.documentElement.dataset.easy = ''; else delete document.documentElement.dataset.easy;
 }
 
 /** The running engine (start-up, update checks). Only valid after applyAppearance ran once. */

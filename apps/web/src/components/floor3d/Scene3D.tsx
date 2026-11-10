@@ -11,7 +11,7 @@ const Block3D = memo(function Block3D({ b, selected, editable, hot }: { b: Block
   const f = footprint(b);
   const style = { left: b.x * CELL, top: b.y * CELL, width: f.w * CELL, height: f.d * CELL, '--h': `${b.h * STEP_H}px`, '--z': `${(b.z ?? 0) * STEP_H}px`, '--c': b.color } as CSSProperties;
   return (
-    <div className="f3-block" data-bid={b.id} data-kind={b.kind} data-front={FRONT[b.rot]} data-sel={selected || undefined} data-hot={hot || undefined} data-edit={editable || undefined} style={style}>
+    <div className="f3-block" data-bid={b.id} data-kind={b.kind} data-wall={b.kind === 'wall' || undefined} data-zone={b.kind === 'zone' || undefined} data-front={FRONT[b.rot]} data-sel={selected || undefined} data-hot={hot || undefined} data-edit={editable || undefined} style={style}>
       <i className="f3-top" /><i className="f3-s" /><i className="f3-n" /><i className="f3-e" /><i className="f3-w" />
     </div>
   );
@@ -41,7 +41,7 @@ const Labels = memo(function Labels({ blocks, size, selectedId, editable, info }
 });
 
 type Gesture =
-  | { mode: 'pinch'; dist: number; zoom: number }
+  | { mode: 'pinch'; dist: number; zoom: number; angle: number }
   | { mode: 'block'; id: string; sx: number; sy: number; bx: number; by: number; moved: boolean; editable: boolean; /** every block under the finger, front to back */ stack: string[]; /** it was already the selected one */ was: boolean }
   | { mode: 'pan' | 'orbit'; lx: number; ly: number; moved: boolean };
 
@@ -50,13 +50,13 @@ type Gesture =
  * with snapping and no overlaps); one finger on the empty floor pans or turns the view (the Move/Turn switch); two fingers pinch to zoom.
  * The mouse wheel zooms, shift or right-drag turns. Arrow keys pan the view (the editor claims them for the selected block through `onKey`).
  */
-export function Scene3D({ cam, size, blocks, selectedId, editable = false, info, onTap, onDragStart, onMove, onDragEnd, onKey, onFloorTap, label = 'Floor plan', compact = false, children }: {
+export function Scene3D({ cam, size, blocks, selectedId, editable = false, info, onTap, onDragStart, onMove, onDragEnd, onKey, onFloorTap, label = 'Floor plan', compact = false, fill = false, children }: {
   cam: CameraApi; size: number; blocks: Block[]; selectedId?: string | null; editable?: boolean; info?: Map<string, BlockInfo>;
   onTap?(id: string | null): void; onDragStart?(id: string): void; onMove?(id: string, x: number, y: number): void; onDragEnd?(): void;
   /** Return true when the key was used. */
   onKey?(e: React.KeyboardEvent): boolean;
   /** A tap anywhere (block or floor) reports the spot instead of picking a block, in pixels from the floor's centre. For a straight-down overview. */
-  onFloorTap?(cx: number, cy: number): void; label?: string; compact?: boolean; children?: ReactNode;
+  onFloorTap?(cx: number, cy: number): void; label?: string; compact?: boolean; /** fill the box it is in (the full-screen viewer) */ fill?: boolean; children?: ReactNode;
 }) {
   const vp = useRef<HTMLDivElement>(null);
   const blocksRef = useRef(blocks); blocksRef.current = blocks;
@@ -107,7 +107,7 @@ export function Scene3D({ cam, size, blocks, selectedId, editable = false, info,
     setGesturing(true);
     if (ptrs.current.size === 2) {
       const [a, b] = [...ptrs.current.values()];
-      g.current = { mode: 'pinch', dist: Math.hypot(a!.x - b!.x, a!.y - b!.y) || 1, zoom: cam.ref.current.zoom };
+      g.current = { mode: 'pinch', dist: Math.hypot(a!.x - b!.x, a!.y - b!.y) || 1, zoom: cam.ref.current.zoom, angle: Math.atan2(b!.y - a!.y, b!.x - a!.x) };
       return;
     }
     const hit = (e.target as HTMLElement).closest<HTMLElement>('[data-bid]');
@@ -137,6 +137,12 @@ export function Scene3D({ cam, size, blocks, selectedId, editable = false, info,
       if (ptrs.current.size < 2) return;
       const [a, b] = [...ptrs.current.values()];
       cam.setZoom(s.zoom * (Math.hypot(a!.x - b!.x, a!.y - b!.y) / s.dist));
+      // twisting two fingers turns the view (the floor follows the fingers)
+      const ang = Math.atan2(b!.y - a!.y, b!.x - a!.x);
+      let da = ((ang - s.angle) * 180) / Math.PI;
+      if (da > 180) da -= 360; if (da < -180) da += 360;
+      s.angle = ang;
+      if (da) cam.turn(da);
     } else if (s.mode === 'block') {
       if (!s.editable) { if (Math.hypot(e.clientX - s.sx, e.clientY - s.sy) > 6) s.moved = true; return; }
       if (!s.moved) { if (Math.hypot(e.clientX - s.sx, e.clientY - s.sy) < 5) return; s.moved = true; onDragStart?.(s.id); }
@@ -196,7 +202,7 @@ export function Scene3D({ cam, size, blocks, selectedId, editable = false, info,
   const vars = { '--f3-yaw': `${c.yaw}deg`, '--f3-pitch': `${c.pitch}deg`, '--f3-z': c.zoom, '--f3-px': `${c.px}px`, '--f3-py': `${c.py}px` } as CSSProperties;
   const S = size * CELL;
   return (
-    <div ref={vp} className="f3-viewport" style={vars} data-gesture={gesturing || undefined} data-compact={compact || undefined} role="application" tabIndex={0} aria-label={`${label}. Arrow keys move the view, plus and minus zoom, shift with arrows turns and tilts.`}
+    <div ref={vp} className="f3-viewport" style={vars} data-gesture={gesturing || undefined} data-compact={compact || undefined} data-fill={fill || undefined} role="application" tabIndex={0} aria-label={`${label}. Arrow keys move the view, plus and minus zoom, shift with arrows turns and tilts.`}
       onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onClick={click} onContextMenu={(e) => e.preventDefault()} onKeyDown={keys}>
       <div className="f3-world">
         <div className="f3-floor" style={{ left: -S / 2, top: -S / 2, width: S, height: S }}>

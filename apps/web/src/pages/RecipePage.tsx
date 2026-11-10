@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { FolderPlus, Maximize2, ChefHat, Clock, ExternalLink, Link2, Minus, Pencil, Plus, ShoppingCart, Trash2, Users } from 'lucide-react';
-import { UNIT_MODES, formatQuantity, unscalableLines, displayAmount, highlightStep, prettyStock, stockStatus, type Ingredient, type Item, type Recipe, type StockStatus } from '@turbopantry/shared';
+import { UNIT_MODES, formatQuantity, unscalableLines, displayAmount, stockStatus, type Ingredient, type Item, type Recipe, type StockStatus } from '@turbopantry/shared';
 import { CookSheet } from '../components/CookSheet.tsx';
 import { RecipeGroupsSheet } from '../components/RecipeGroupsSheet.tsx';
 import { RecipeFullscreen } from '../components/RecipeFullscreen.tsx';
@@ -9,23 +9,21 @@ import { defaultChoices, IngredientLinker, resolveLinks, type Choices } from '..
 import { Select } from '../components/Select.tsx';
 import { Sheet } from '../components/Sheet.tsx';
 import { LoadError } from '../components/SignInNotice.tsx';
+import { StepText } from '../components/StepText.tsx';
 import { RecipeImage } from './RecipesPage.tsx';
 import { useItems } from '../lib/data.ts';
 import { toast } from '../lib/toast.ts';
 import { useApi, useLoad } from '../lib/useApi.ts';
 import { useStore } from '../lib/store.ts';
+import { useEasy } from '../lib/easy.ts';
 import { cn } from '../lib/cn.ts';
 
 const mins = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`);
 
-/** "have it", "have 3 of 5", "missing" next to a line, from the pantry. Says nothing for lines it cannot judge. */
-function StockChip({ st, item }: { st: StockStatus; item?: Item }) {
-  if (st.state === 'unlinked') return null;
-  const base = 'ml-2 inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium';
-  if (st.state === 'enough') return <span className={cn(base, 'bg-good/15 text-good')}>have it</span>;
-  if (st.state === 'some') return <span className={cn(base, 'bg-warn/15 text-warn')}>have {prettyStock(st.have ?? 0, st.unit)}</span>;
-  if (st.state === 'none') return <span className={cn(base, 'bg-bad/15 text-bad')}>{item?.qty ? 'not enough' : 'none'}</span>;
-  return <span className={cn(base, 'bg-raised text-muted')} title="Its amount cannot be compared with what is in stock">have {prettyStock(st.have ?? 0, st.unit)}</span>;
+/** Says "out" next to a line only when the pantry has none of it. Whether some is enough is not for the app to say, so nothing else is labelled. */
+function StockChip({ item }: { item?: Item }) {
+  if (!item || item.qty > 0) return null;
+  return <span className="ml-2 inline-block whitespace-nowrap rounded-full bg-bad/15 px-2 py-0.5 text-xs font-medium text-bad">out</span>;
 }
 
 function IngredientList({ items, factor, showQuantities, mode, byId }: { items: Ingredient[]; factor: number; showQuantities: boolean; mode: 'original' | 'metric-cups' | 'metric-grams'; byId: Map<number, Item> }) {
@@ -39,13 +37,12 @@ function IngredientList({ items, factor, showQuantities, mode, byId }: { items: 
         section = it.section;
         const item = it.itemId ? byId.get(it.itemId) : undefined;
         const amount = showQuantities ? displayAmount(it, factor, mode, item?.gramsPerCup ?? null).amount : '';
-        const st = stockStatus(it, factor, item);
         return [head, (
           <li key={i}><label className="flex min-h-[2.75rem] cursor-pointer items-start gap-3 py-1.5">
             <input type="checkbox" className="mt-1.5 h-5 w-5 shrink-0" checked={done.has(i)} onChange={() => toggle(i)} />
             <span className={cn('min-w-0', done.has(i) && 'text-muted line-through')}>
               {amount && <strong className="font-semibold tabular-nums">{amount} </strong>}{it.quantity === null ? it.raw : it.name}{it.quantity !== null && it.note && <span className="text-muted">, {it.note}</span>}
-              <StockChip st={st} item={item} />
+              <StockChip item={item} />
             </span>
           </label></li>
         )];
@@ -69,6 +66,7 @@ export function RecipePage() {
   const showQuantities = useStore((st) => st.settings.showQuantities);
   const mode = useStore((st) => st.settings.unitMode);
   const updateSettings = useStore((st) => st.updateSettings);
+  const easy = useEasy();
 
   // a recipe that does not say how many it serves still scales: as batches (½×, 1×, 2×…)
   const known = !!r?.servings;
@@ -84,6 +82,7 @@ export function RecipePage() {
   const prep = r.prepMinutes || null, cook = r.cookMinutes || null;
   const total = r.totalMinutes || (prep || cook ? (prep ?? 0) + (cook ?? 0) : null);
   const needed = statuses.filter((s) => s.state !== 'enough').length;
+  const haveCount = r.ingredients.filter((ing) => { const it = ing.itemId ? byId.get(ing.itemId) : undefined; return !!it && it.qty > 0; }).length;
   const unlinked = statuses.filter((s) => s.state === 'unlinked').length;
 
   async function remove(recipe: Recipe) {
@@ -116,6 +115,21 @@ export function RecipePage() {
           {r.sourceUrl && <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 underline"><ExternalLink size={14} />{r.sourceName ?? 'Source'}</a>}
         </div>
         {r.tags.length > 0 && <div className="flex flex-wrap gap-1.5">{r.tags.map((t) => <span key={t} className="chip">{t}</span>)}</div>}
+        {easy ? (
+          <div className="space-y-2 pt-1">
+            <div className="grid grid-cols-2 gap-2">
+              <button className="btn btn-accent easy-action" onClick={() => setFull(true)}><Maximize2 size={20} />Cook it</button>
+              <Link to={`/recipes/${r.id}/edit`} className="btn easy-action"><Pencil size={20} />Edit</Link>
+            </div>
+            <details className="text-base"><summary className="flex min-h-[3rem] cursor-pointer items-center text-muted">More</summary>
+              <div className="flex flex-wrap gap-2 pb-1">
+                <button className="btn" onClick={() => setGroupsOpen(true)}><FolderPlus size={17} />Groups</button>
+                <button className="btn" onClick={() => { setChoices(defaultChoices(r.ingredients, items)); setSheet('link'); }}><Link2 size={17} />Link items{unlinked ? ` (${unlinked})` : ''}</button>
+                <button className="btn" onClick={() => void remove(r)} disabled={deleting}><Trash2 size={17} />Delete</button>
+              </div>
+            </details>
+          </div>
+        ) : (
         <div className="flex flex-wrap gap-2 pt-1">
           <button className="btn h-11" onClick={() => setGroupsOpen(true)}><FolderPlus size={15} />Groups</button>
           <button className="btn h-11" onClick={() => setFull(true)}><Maximize2 size={15} />Full screen</button>
@@ -123,15 +137,16 @@ export function RecipePage() {
           <button className="btn h-11" onClick={() => { setChoices(defaultChoices(r.ingredients, items)); setSheet('link'); }}><Link2 size={15} />Link items{unlinked ? ` (${unlinked})` : ''}</button>
           <button className="btn h-11" onClick={() => void remove(r)} disabled={deleting}><Trash2 size={15} />Delete</button>
         </div>
+        )}
       </header>
 
       <div className="grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <section className="card space-y-3 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-semibold">Ingredients</h2>
-            <Select className="h-10 min-w-[11rem] !py-0 text-sm" aria-label="How amounts are shown" value={showQuantities ? mode : 'off'}
+            {!easy && <Select className="h-10 min-w-[11rem] !py-0 text-sm" aria-label="How amounts are shown" value={showQuantities ? mode : 'off'}
               onChange={(v) => (v === 'off' ? updateSettings({ showQuantities: false }) : updateSettings({ showQuantities: true, unitMode: v as typeof mode }))}
-              options={[...UNIT_MODES.map((m) => ({ value: m.id, label: m.label })), { value: 'off', label: 'Hide amounts' }]} />
+              options={[...UNIT_MODES.map((m) => ({ value: m.id, label: m.label })), { value: 'off', label: 'Hide amounts' }]} />}
           </div>
           {showQuantities && (
             <div className="flex items-center gap-1 text-sm" role="group" aria-label="Servings">
@@ -141,11 +156,12 @@ export function RecipePage() {
             </div>
           )}
           {factor !== 1 && showQuantities && unscalableLines(r.ingredients).length > 0 && <p className="rounded-theme bg-warn/15 p-3 text-sm" role="status">{unscalableLines(r.ingredients).length === 1 ? 'This line has an amount' : 'These lines have amounts'} that could not be read, so {unscalableLines(r.ingredients).length === 1 ? 'it stays' : 'they stay'} as written: {unscalableLines(r.ingredients).join('; ')}</p>}
+          {r.ingredients.length > 0 && <p className="text-sm" aria-label={`You have ${haveCount} of ${r.ingredients.length} ingredients`}><strong className="tabular-nums">Have {haveCount}/{r.ingredients.length}</strong> <span className="text-muted">ingredients</span></p>}
           {r.ingredients.length ? <IngredientList items={r.ingredients} factor={factor} showQuantities={showQuantities} mode={mode} byId={byId} /> : <p className="text-sm text-muted">No ingredients.</p>}
         </section>
         <section className="space-y-3">
           <h2 className="font-semibold">Method</h2>
-          {r.steps.length ? <ol className="space-y-3">{r.steps.map((s, i) => <li key={i} className="flex gap-3"><span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-fg">{i + 1}</span><span>{highlightStep(s, r.ingredients, { hideQuantities: !showQuantities, factor }).map((seg, k) => (seg.bold ? <strong key={k} className="font-semibold">{seg.text}</strong> : <span key={k}>{seg.text}</span>))}</span></li>)}</ol>
+          {r.steps.length ? <ol className="space-y-3">{r.steps.map((s, i) => <li key={i} className="flex gap-3"><span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-fg">{i + 1}</span><span><StepText step={s} ingredients={r.ingredients} hideQuantities={!showQuantities} factor={factor} label={r.title} /></span></li>)}</ol>
             : <p className="text-sm text-muted">No method written down.</p>}
           {r.notes && <div className="card p-3 text-sm"><div className="mb-1 font-semibold">Notes</div><p className="whitespace-pre-line">{r.notes}</p></div>}
         </section>

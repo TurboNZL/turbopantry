@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displayAmount, normaliseQuantityText, unscalableLines, formatQuantity, ingredientsToBlock, parseIngredient, parseIngredientBlock, parseMinutes, parseQuantity, parseServings, scaleIngredient } from './index.ts';
+import { displayAmount, normaliseQuantityText, unscalableLines, formatQuantity, ingredientsToBlock, parseIngredient, parseIngredientBlock, parseMinutes, parseQuantity, parseServings, scaleIngredient, unitLabel, splitAmount } from './index.ts';
 
 describe('parseQuantity', () => {
   it.each([['1', 1], ['1/2', 0.5], ['1 1/2', 1.5], ['½', 0.5], ['1½', 1.5], ['2.5', 2.5], ['1,5', 1.5]])('%s', (s, n) => expect(parseQuantity(s)).toBeCloseTo(n));
@@ -73,5 +73,25 @@ describe('descriptions before the name', () => {
     expect(parseIngredient('2 large, ripe tomatoes')).toMatchObject({ name: 'tomatoes', note: 'large, ripe' });
     expect(parseIngredient('500g chicken breast, boneless, skinless')).toMatchObject({ name: 'chicken breast', note: 'boneless, skinless' });
     expect(parseIngredient('1 onion, finely diced')).toMatchObject({ name: 'onion', note: 'finely diced' });
+  });
+});
+
+describe('container words and litres', () => {
+  it('a bare leading Pkt is the unit, not the name', () => {
+    const i = parseIngredient('Pkt Coles Kitchen Ramen Noodles');
+    expect(i.quantity).toBe(1); expect(i.unit).toBe('packet'); expect(i.name).toBe('Coles Kitchen Ramen Noodles');
+  });
+  it('pkt after a number is a packet', () => { const i = parseIngredient('2 pkt noodles'); expect(i.unit).toBe('packet'); expect(i.name).toBe('noodles'); });
+  it('litres are spelled out', () => { expect(unitLabel('l', 2)).toBe('litres'); expect(unitLabel('l', 1)).toBe('litre'); });
+});
+
+describe('splitAmount', () => {
+  it('splits the amount from the ingredient', () => {
+    expect(splitAmount('1 1/2 cups all-purpose flour, sifted')).toEqual({ amount: '1 1/2 cups', rest: 'all-purpose flour, sifted' });
+    expect(splitAmount('2-3 tbsp olive oil')).toEqual({ amount: '2-3 tbsp', rest: 'olive oil' });
+    expect(splitAmount('1 (14 oz) can chopped tomatoes')).toEqual({ amount: '1 (14 oz) can', rest: 'chopped tomatoes' });
+    expect(splitAmount('2 eggs')).toEqual({ amount: '2', rest: 'eggs' });
+    expect(splitAmount('salt to taste')).toEqual({ amount: '', rest: 'salt to taste' });
+    expect(splitAmount('a pinch of salt')).toEqual({ amount: '', rest: 'a pinch of salt' });
   });
 });

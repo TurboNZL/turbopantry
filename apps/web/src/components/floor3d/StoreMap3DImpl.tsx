@@ -1,26 +1,26 @@
 import { useMemo, useState } from 'react';
-import { Footprints, LocateFixed, Pencil, Rotate3d } from 'lucide-react';
-import { FLOOR, formatStock, titleCase, walkOrder, type ListEntry } from '@turbopantry/shared';
+import { Footprints, LocateFixed } from 'lucide-react';
+import { FLOOR, footprint, formatStock, titleCase, walkOrder, type ListEntry } from '@turbopantry/shared';
 import { useLayout } from '../../lib/useLayout.ts';
 import { useApi } from '../../lib/useApi.ts';
 import { toast } from '../../lib/toast.ts';
-import { Sheet } from '../Sheet.tsx';
-import { CameraPad } from './CameraPad.tsx';
-import { useCamera } from './camera.ts';
-import { LayoutEditor } from './LayoutEditor.tsx';
+import { cn } from '../../lib/cn.ts';
+import { CELL, useCamera } from './camera.ts';
 import { Scene3D, type BlockInfo } from './Scene3D.tsx';
+import { Stage3D } from './Stage3D.tsx';
 import type { StoreMap3DProps } from './types.ts';
 
-/** A shop as a 3D plan: aisles carry shopping groups; tap one to see what your list needs from it. */
-export function StoreMap3DImpl({ store, entries, items }: StoreMap3DProps) {
+/** A shop as a full-screen 3D view: the areas you drew carry shopping groups; pick one (in the view or the panel) to zoom in and see what your list needs from it. */
+export function StoreMap3DImpl({ store, entries, items, onClose }: StoreMap3DProps) {
   const api = useApi();
-  const { layout, loaded, save } = useLayout('store', store.id);
+  const { layout, loaded } = useLayout('store', store.id);
   const cam = useCamera(true); // starts straight down: tap where you are to come in close
-  const [editing, setEditing] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [drawer, setDrawer] = useState(false);
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
   const todo = useMemo(() => entries.filter((e) => !e.checked), [entries]);
   const walking = layout.blocks.some((b) => b.walk !== undefined && b.groups?.length);
+  const SIZE = FLOOR.store * CELL;
 
   const { lines, rest } = useMemo(() => {
     const claimed = new Set<ListEntry>(), map = new Map<string, ListEntry[]>();
@@ -42,50 +42,55 @@ export function StoreMap3DImpl({ store, entries, items }: StoreMap3DProps) {
     return m;
   }, [layout.blocks, lines]);
 
+  const named = useMemo(() => [...layout.blocks].filter((b) => b.label || b.groups?.length).sort((a, b) => (a.walk ?? 999) - (b.walk ?? 999) || a.label.localeCompare(b.label)), [layout.blocks]);
+  const open = layout.blocks.find((b) => b.id === openId) ?? null;
+  const centre = (b: (typeof layout.blocks)[number]) => { const f = footprint(b); return { x: (b.x + f.w / 2) * CELL - SIZE / 2, y: (b.y + f.d / 2) * CELL - SIZE / 2 }; };
+  const pick = (id: string | null) => {
+    const b = id ? layout.blocks.find((x) => x.id === id) : undefined;
+    if (!b) { setOpenId(null); return; }
+    setOpenId(b.id); setDrawer(true);
+    const c = centre(b); cam.closeUp(c.x, c.y);
+  };
+
   async function useOrder() {
     try { await api.updateStore(store.id, { order: walkOrder(layout.blocks, store.order) }); toast(`${store.name} now follows this walking order.`); } catch (e) { toast((e as Error).message); }
   }
   const nameOf = (e: ListEntry) => titleCase((e.itemId ? byId.get(e.itemId)?.name : null) ?? e.name);
   const amount = (e: ListEntry) => (e.qty ? formatStock(e.qty, e.unit) : '');
 
-  if (!loaded) return <div className="card p-8 text-center text-sm text-muted" role="status">Loading the map…</div>;
-  if (editing) return <LayoutEditor kind="store" layout={layout} cam={cam} onSave={(l) => void save(l)} onDone={() => setEditing(false)} />;
-  const open = layout.blocks.find((b) => b.id === openId) ?? null;
-
-  if (!layout.blocks.length) return (
-    <div className="card space-y-3 p-6 text-center">
-      <h2 className="font-semibold">Map {store.name}</h2>
-      <p className="text-sm text-muted">Draw the aisles, then say which shopping groups are in each and the order you walk. Your list can then follow it.</p>
-      <button className="btn btn-accent h-11 px-4" onClick={() => setEditing(true)}>Build the map</button>
+  const panel = (
+    <div className="space-y-3 p-3">
+      <div className="flex flex-wrap gap-2">
+        {!cam.top && <button className="btn flex h-10 items-center gap-1.5 px-3" onClick={() => { setOpenId(null); cam.overview(); }}><LocateFixed size={16} />Top down</button>}
+        {walking && <button className="btn flex h-10 items-center gap-1.5 px-3" onClick={() => void useOrder()}><Footprints size={16} />Use this walking order</button>}
+      </div>
+      {!layout.blocks.length && loaded && <p className="text-sm text-muted">{store.name} has no map yet. Draw its areas in Settings › Stores.</p>}
+      <ul className="space-y-1">
+        {named.map((b) => { const n = lines.get(b.id)?.length ?? 0;
+          return <li key={b.id}><button className={cn('flex min-h-[2.75rem] w-full items-center justify-between gap-2 rounded-theme border px-3 text-left', openId === b.id ? 'border-accent bg-accent/10' : 'border-line')} aria-pressed={openId === b.id} onClick={() => pick(b.id)}>
+            <span className="flex min-w-0 items-center gap-2">{b.walk !== undefined && <b className="flex h-6 min-w-6 items-center justify-center rounded-full bg-accent px-1 text-xs text-accent-fg">{b.walk}</b>}<span className="min-w-0 truncate font-medium">{titleCase(b.label) || (b.groups ?? []).join(', ')}</span></span>
+            {n > 0 && <b className="shrink-0 rounded-full bg-warn px-1.5 py-0.5 text-xs text-white">{n}</b>}</button></li>; })}
+      </ul>
+      {open && (
+        <div className="space-y-2 border-t border-line pt-3">
+          <h3 className="text-base font-semibold">{titleCase(open.label) || 'This area'}</h3>
+          <div className="flex flex-wrap gap-1.5">{open.groups?.length ? open.groups.map((g) => <span key={g} className="chip px-2 py-1 text-xs">{g}</span>) : <span className="text-sm text-muted">No shopping groups chosen yet.</span>}</div>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">To grab here</h4>
+          {(lines.get(open.id) ?? []).length ? (
+            <ul className="divide-y divide-line overflow-hidden rounded-theme border border-line">
+              {lines.get(open.id)!.map((e) => <li key={e.id} className="flex min-h-[2.75rem] items-center justify-between gap-2 px-3"><span className="min-w-0 truncate">{nameOf(e)}</span><span className="shrink-0 text-sm text-muted">{amount(e)}</span></li>)}
+            </ul>
+          ) : <p className="text-sm text-muted">Nothing on your list from here.</p>}
+        </div>
+      )}
+      {rest.length > 0 && <p className="text-xs text-muted">{rest.length} {rest.length === 1 ? 'line' : 'lines'} on your list {rest.length === 1 ? 'is' : 'are'} in a group that no area of this map claims.</p>}
     </div>
   );
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <button className="btn flex h-11 items-center gap-1.5 px-3" onClick={() => setEditing(true)}><Pencil size={16} />Edit map</button>
-        {walking && <button className="btn flex h-11 items-center gap-1.5 px-3" onClick={() => void useOrder()}><Footprints size={16} />Use this walking order</button>}
-        {!cam.top && <button className="btn flex h-11 items-center gap-1.5 px-3" onClick={() => { setOpenId(null); cam.overview(); }}><LocateFixed size={16} />Top down</button>}
-      </div>
-      {cam.top && <p className="flex items-center justify-center gap-2 rounded-theme bg-accent/15 px-3 py-2 text-center text-sm font-medium" role="status"><Rotate3d size={16} aria-hidden />Tap where you are in the store to look around from there.</p>}
-      <Scene3D cam={cam} size={FLOOR.store} blocks={layout.blocks} selectedId={openId} info={info} label={`${store.name} map`} onFloorTap={cam.top ? (x, y) => cam.closeUp(x, y) : undefined} onTap={(id) => { const b = layout.blocks.find((x) => x.id === id); setOpenId(b ? b.id : null); }} />
-      <CameraPad cam={cam} />
-      <p className="text-center text-xs text-muted">Tap a name tag to pick a block, and tap a picked block again to pick the one behind it. {walking ? 'Blue numbers are the order you walk. ' : ''}Orange numbers are things on your list in that part of the shop.</p>
-      {rest.length > 0 && <p className="text-center text-xs text-muted">{rest.length} {rest.length === 1 ? 'line' : 'lines'} on your list {rest.length === 1 ? 'is' : 'are'} in a group that no part of this map claims.</p>}
-
-      {open && (
-        <Sheet title={titleCase(open.label)} onClose={() => setOpenId(null)}>
-          {open.walk !== undefined && <p className="text-sm text-muted">Stop {open.walk} on your walk.</p>}
-          <div className="space-y-1"><h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Shopping groups</h3>
-            <div className="flex flex-wrap gap-1.5">{open.groups?.length ? open.groups.map((g) => <span key={g} className="chip px-2 py-1 text-xs">{g}</span>) : <span className="text-sm text-muted">None chosen yet. Edit the map to choose them.</span>}</div></div>
-          <div className="space-y-1"><h3 className="text-xs font-semibold uppercase tracking-wide text-muted">To grab here</h3>
-            {(lines.get(open.id) ?? []).length ? (
-              <ul className="divide-y divide-line overflow-hidden rounded-theme border border-line">
-                {lines.get(open.id)!.map((e) => <li key={e.id} className="flex min-h-[2.75rem] items-center justify-between gap-2 px-3"><span className="min-w-0 truncate">{nameOf(e)}</span><span className="shrink-0 text-sm text-muted">{amount(e)}</span></li>)}
-              </ul>
-            ) : <p className="text-sm text-muted">Nothing on your list from here.</p>}</div>
-        </Sheet>
-      )}
-    </div>
+    <Stage3D title={`${store.name} map`} cam={cam} onClose={onClose} panel={panel} panelTitle="Areas" drawer={drawer} onDrawer={setDrawer}>
+      {!loaded ? <div className="flex h-full items-center justify-center text-sm text-muted" role="status">Loading the map…</div>
+        : <Scene3D fill cam={cam} size={FLOOR.store} blocks={layout.blocks} selectedId={openId} info={info} label={`${store.name} map`} onFloorTap={cam.top ? (x, y) => cam.closeUp(x, y) : undefined} onTap={pick} />}
+    </Stage3D>
   );
 }

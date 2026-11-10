@@ -5,6 +5,7 @@ import { Section } from '../components/Section.tsx';
 import { ItemsTab } from '../components/ItemsTab.tsx';
 import { DuplicatesTab } from '../components/DuplicatesTab.tsx';
 import { StoresTab } from '../components/StoresTab.tsx';
+import { KitchenTab } from '../components/KitchenTab.tsx';
 import { PairCard, ServerCard } from '../components/ServerCard.tsx';
 import { InstagramCard } from '../components/InstagramCard.tsx';
 import { ServerUpdateCard } from '../components/ServerUpdate.tsx';
@@ -12,25 +13,35 @@ import { View3dCard } from '../components/View3dCard.tsx';
 import { ThemeUpdates } from '../components/ThemeUpdates.tsx';
 import { NotificationsCard } from '../components/NotificationsCard.tsx';
 import { AppUpdatesCard } from '../components/AppUpdatesCard.tsx';
+import { EasyCard } from '../components/EasyCard.tsx';
+import { useEasy } from '../lib/easy.ts';
+import { useState } from 'react';
 import { ErrorBoundary } from '../components/ErrorBoundary.tsx';
 import { cn } from '../lib/cn.ts';
 
-const TABS = [{ id: 'look', label: 'Appearance' }, { id: 'items', label: 'Items' }, { id: 'duplicates', label: 'Duplicates' }, { id: 'stores', label: 'Stores' }, { id: 'server', label: 'Server' }, { id: 'guides', label: 'Guides' }];
+const TABS = [{ id: 'look', label: 'Appearance' }, { id: 'items', label: 'Items' }, { id: 'duplicates', label: 'Duplicates' }, { id: 'stores', label: 'Stores' }, { id: 'kitchen', label: 'Kitchen' }, { id: 'server', label: 'Server' }, { id: 'guides', label: 'Guides' }];
 
 /** Settings: a tab strip that wraps instead of scrolling sideways (settings-shell convention), one titled panel per topic. */
 export function SettingsPage() {
   const [params, setParams] = useSearchParams();
+  const easy = useEasy();
+  const [more, setMore] = useState(false);
   const tab = TABS.some((t) => t.id === params.get('tab')) ? params.get('tab')! : 'look';
+  // easy mode keeps a few tabs; the advanced ones appear when asked for (or when a link goes straight to one)
+  const advanced = ['items', 'duplicates', 'stores', 'kitchen'];
+  const shownTabs = easy && !more && !advanced.includes(tab) ? TABS.filter((t) => !advanced.includes(t.id)) : TABS;
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <h1 className="text-2xl font-bold">Settings</h1>
       <div role="tablist" aria-label="Settings sections" className="flex flex-wrap gap-x-1 border-b border-line pb-px">
-        {TABS.map((t) => (
+        {shownTabs.map((t) => (
           <button key={t.id} role="tab" aria-selected={tab === t.id} data-selected={tab === t.id || undefined} onClick={() => setParams({ tab: t.id }, { replace: true })}
             className={cn('-mb-px shrink-0 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors', tab === t.id ? 'border-accent text-fg' : 'border-transparent text-muted hover:text-fg')}>{t.label}</button>
         ))}
       </div>
+      {easy && !more && !advanced.includes(tab) && <button className="btn" onClick={() => setMore(true)}>Show advanced settings</button>}
       {tab === 'look' && <>
+        <EasyCard />
         <AppearanceLayout />
         <Section title="Wallpaper"><WallpaperCard /></Section>
         <View3dCard />
@@ -40,6 +51,7 @@ export function SettingsPage() {
       {tab === 'items' && <ItemsTab />}
       {tab === 'duplicates' && <DuplicatesTab />}
       {tab === 'stores' && <StoresTab />}
+      {tab === 'kitchen' && <KitchenTab />}
       {tab === 'server' && <><AppUpdatesCard /><NotificationsCard /><ServerUpdateCard /><ServerCard /><PairCard /><InstagramCard /></>}
       {tab === 'guides' && <GuidesTab />}
       </ErrorBoundary>

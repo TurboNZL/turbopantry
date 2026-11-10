@@ -29,7 +29,7 @@ describe('items', () => {
   it('makes an item with a guessed category and the unit\'s default step and amount', async () => {
     const r = await call('POST', '/api/items', { name: 'Plain flour', unit: 'g', qty: 1000 });
     expect(r.status).toBe(201);
-    expect(r.body).toMatchObject({ name: 'Plain flour', category: 'Flour & baking', unit: 'g', qty: 1000, step: 100, defaultQty: 500, tracked: true, existed: false });
+    expect(r.body).toMatchObject({ name: 'Plain flour', category: 'Flour & baking', unit: 'g', qty: 1000, step: 500, defaultQty: 500, tracked: true, existed: false });
   });
   it('returns the existing item for the same words, so linking never duplicates', async () => {
     const first = await mkItem({ name: 'Free Range Eggs' });

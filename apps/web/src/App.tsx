@@ -7,12 +7,19 @@ import { RecipesPage } from './pages/RecipesPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 import { ShoppingPage } from './pages/ShoppingPage.tsx';
 
+/** Opening the app lands on the page that was open when it was closed. */
+export const LAST_PAGE_KEY = 'turbopantry.lastPage';
+function lastPage(): string {
+  try { const p = localStorage.getItem(LAST_PAGE_KEY); if (p && p.startsWith('/') && !p.startsWith('//') && p !== '/') return p; } catch { /* not kept */ }
+  return '/recipes';
+}
+
 export function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
-          <Route index element={<Navigate to="/recipes" replace />} />
+          <Route index element={<Navigate to={lastPage()} replace />} />
           <Route path="recipes" element={<RecipesPage />} />
           <Route path="recipes/import" element={<ImportPage />} />
           <Route path="recipes/new" element={<NewRecipePage />} />

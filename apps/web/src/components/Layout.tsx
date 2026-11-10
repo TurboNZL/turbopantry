@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { BookOpen, Package, Search, Settings, ShoppingCart } from 'lucide-react';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { effectiveUi } from 'turbothemes';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/cn.ts';
@@ -10,6 +10,7 @@ import { useLiveConnection } from '../lib/live.ts';
 import { useListAlerts } from '../lib/listAlerts.ts';
 import { Toasts } from './Toasts.tsx';
 import { ContextMenuHost } from '../lib/contextMenu.tsx';
+import { TimerHost } from './TimerHost.tsx';
 
 const NAV = [
   { to: '/recipes', label: 'Recipes', icon: BookOpen },
@@ -67,16 +68,21 @@ export function Layout() {
   const nav = useNavigate();
   const { pathname } = useLocation();
   useListAlerts();
+  const { search } = useLocation();
+  useEffect(() => { try { if (pathname !== '/') localStorage.setItem('turbopantry.lastPage', pathname + search); } catch { /* not kept */ } }, [pathname, search]);
   useLiveConnection(); // one live stream per device: pantry, list and recipes update on every phone at once
   const open = useListEntries().entries.filter((e) => !e.checked).length;
-  const badge = (to: string, big = false) => (to === '/shopping' && open > 0 ? <span className={cn('inline-flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full !bg-accent px-1 text-[11px] font-bold leading-none tabular-nums !text-accent-fg', big ? 'ml-1' : 'absolute right-1/4 top-0.5 z-10')} aria-label={`${open} on the list`}>{open}</span> : null);
+  // the count never takes room: it sits over the corner of its icon, so showing or hiding it moves nothing
+  const badge = (to: string) => (to === '/shopping' && open > 0 ? <span className="bt-badge pointer-events-none absolute z-10 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full !bg-accent px-1 text-[11px] font-bold leading-none tabular-nums !text-accent-fg" aria-label={`${open} on the list`}>{open}</span> : null);
   const onRecipes = pathname.startsWith('/recipes') || pathname === '/';
   const sideRef = useIndicator<HTMLElement>(pathname);
   const tabRef = useIndicator<HTMLElement>(pathname);
   const [q, setQ] = useState('');
   const ui = useStore((s) => s.settings.ui);
-  const layout = useStore((s) => s.settings.layout);
-  const topbar = layout === 'topbar', dock = layout === 'dock';
+  const easy = useStore((s) => s.settings.easyMode);
+  const savedLayout = useStore((s) => s.settings.layout);
+  const layout = easy ? 'dock' : savedLayout;
+  const topbar = layout === 'topbar', dock = layout === 'dock' || layout === 'floating-dock';
   const noSide = topbar || dock; // these layouts have no side bar at all
   // the header shows the app's full emblem mark (owner's call, 2026-10-18), not the favicon symbol
   const logo = '/icon.svg';
@@ -89,17 +95,17 @@ export function Layout() {
           <span className="bt-ind" aria-hidden />
           <div className="bt-brand mb-3 flex items-center gap-2.5 px-3 pt-1 text-lg font-bold tracking-tight"><img src={logo} alt="" width={26} height={26} className="h-[26px] w-[26px] shrink-0" draggable={false} /><span className="bt-label-text">TurboPantry</span></div>
           {NAV.map(({ to, label, icon: Icon, ...rest }) => (
-            <NavLink key={to} to={to} end={'end' in rest} title={label} className="bt-nav flex items-center gap-3 px-3 py-2 text-sm font-medium">
-              <Icon size={18} className="shrink-0" /><span className="bt-label-text">{label}</span>{badge(to, true)}
+            <NavLink key={to} to={to} end={'end' in rest} title={label} className="bt-nav relative flex items-center gap-3 px-3 py-2 text-sm font-medium">
+              <Icon size={18} className="shrink-0" /><span className="bt-label-text">{label}</span>{badge(to)}
             </NavLink>
           ))}
         </aside>}
         <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
           <form className="bt-top bt-shell sticky top-0 z-10 p-3 backdrop-blur" onSubmit={(e) => { e.preventDefault(); if (q.trim()) nav(`/recipes?q=${encodeURIComponent(q.trim())}`); }}>
             <div className="bt-topin relative mx-auto flex max-w-3xl items-center gap-3">
-              <div className={cn('flex shrink-0 items-center gap-2 font-bold', !noSide && 'md:hidden')}><img src={logo} alt="TurboPantry" width={28} height={28} className="h-7 w-7 shrink-0" draggable={false} />{topbar && <span className="hidden md:inline">TurboPantry</span>}</div>
+              <div className={cn('flex shrink-0 items-center gap-2 font-bold', !noSide && 'md:hidden')}><img src={logo} alt="TurboPantry" width={28} height={28} className="h-7 w-7 shrink-0" draggable={false} />{(topbar || !onRecipes) && <span className={cn(!topbar && !onRecipes ? '' : 'hidden md:inline')}>TurboPantry</span>}</div>
               {topbar && <nav className="bt-toplinks hidden min-w-0 items-center gap-6 overflow-x-auto md:flex" aria-label="Pages">
-                {NAV.map(({ to, label, ...rest }) => <NavLink key={to} to={to} end={'end' in rest} className="bt-toplink whitespace-nowrap">{label}{badge(to, true)}</NavLink>)}
+                {NAV.map(({ to, label, ...rest }) => <NavLink key={to} to={to} end={'end' in rest} className="bt-toplink relative whitespace-nowrap">{label}{badge(to)}</NavLink>)}
               </nav>}
               {onRecipes ? <div className="bt-search relative flex-1">
                 <Search size={16} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-muted" />
@@ -118,6 +124,7 @@ export function Layout() {
       </nav>
       <Toasts />
       <ContextMenuHost />
+      <TimerHost />
     </div>
   );
 }

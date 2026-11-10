@@ -7,7 +7,7 @@ const UNIT_ALIASES: Record<string, string> = {
   cup: 'cup', c: 'cup', tablespoon: 'tbsp', tbsp: 'tbsp', tbs: 'tbsp', tbl: 'tbsp', tb: 'tbsp', teaspoon: 'tsp', tsp: 'tsp',
   ounce: 'oz', oz: 'oz', pound: 'lb', lb: 'lb', gram: 'g', g: 'g', gm: 'g', kilogram: 'kg', kg: 'kg', milligram: 'mg', mg: 'mg',
   milliliter: 'ml', millilitre: 'ml', ml: 'ml', liter: 'l', litre: 'l', l: 'l', pint: 'pint', pt: 'pint', quart: 'quart', qt: 'quart', gallon: 'gallon', gal: 'gallon',
-  fl: 'fl oz', can: 'can', tin: 'can', jar: 'jar', package: 'package', pkg: 'package', packet: 'packet', bag: 'bag', box: 'box', bottle: 'bottle',
+  fl: 'fl oz', can: 'can', tin: 'can', jar: 'jar', package: 'package', pkg: 'package', packet: 'packet', pkt: 'packet', pack: 'packet', pk: 'packet', bag: 'bag', box: 'box', bottle: 'bottle',
   clove: 'clove', slice: 'slice', piece: 'piece', pinch: 'pinch', dash: 'dash', sprig: 'sprig', bunch: 'bunch', stick: 'stick', head: 'head', stalk: 'stalk', handful: 'handful',
   knob: 'knob', sheet: 'sheet', fillet: 'fillet', rasher: 'rasher',
 };
@@ -85,6 +85,12 @@ export function parseIngredient(line: string, section: string | null = null): In
     if (out.quantity !== null) rest = rest.slice(m[0].length);
   }
 
+  // a container word with no number in front ("Pkt Coles Ramen Noodles", "Packet of rice") means one of them: the word is the unit, not part of the name
+  if (out.quantity === null) {
+    const b = /^(pkt|pk|packet|pack|bag|bottle|jar|can|tin|box|bunch|head)\b\.?\s+(?:of\s+)?(?=\S)/i.exec(rest);
+    if (b && rest.slice(b[0].length).split(' ').length >= 1) { out.quantity = 1; out.unit = canonicalUnit(b[1]!); rest = rest.slice(b[0].length); }
+  }
+
   const notes: string[] = [];
   // a size in brackets right after the quantity: "1 (14 oz) can tomatoes"
   const size = /^\(([^)]*)\)\s*/.exec(rest);
@@ -126,6 +132,23 @@ export function parseIngredient(line: string, section: string | null = null): In
   out.name = rest.replace(/\s+/g, ' ').trim() || raw;
   out.note = notes.filter(Boolean).join('; ') || null;
   return out;
+}
+
+/**
+ * Splits a written ingredient line into the part that says how much ("1 1/2 cups", "2-3 tbsp", "1 (14 oz) can") and the rest ("flour, sifted"), for the recipe form's two boxes.
+ * Only a leading number-and-unit counts: a line whose amount is written in words ("one cup", "a pinch of") stays whole in `rest`.
+ */
+export function splitAmount(raw: string): { amount: string; rest: string } {
+  const text = raw.replace(/\s+/g, ' ').trim();
+  if (normaliseQuantityText(text) !== text) return { amount: '', rest: text };
+  const m = LEADING.exec(text);
+  if (!m || parseQuantity(m[1]!) === null) return { amount: '', rest: text };
+  let rest = text.slice(m[0].length);
+  const size = /^\([^)]*\)\s*/.exec(rest); if (size) rest = rest.slice(size[0].length);
+  const w = /^([A-Za-z.]+)\b\.?\s*/.exec(rest);
+  if (w) { const fl = w[1]!.toLowerCase() === 'fl' && /^fl\.?\s*(oz|ounces?)\b\.?\s*/i.exec(rest); if (fl) rest = rest.slice(fl[0].length); else if (canonicalUnit(w[1]!)) rest = rest.slice(w[0].length); }
+  const amount = text.slice(0, text.length - rest.length).trim();
+  return { amount, rest: rest.replace(/^of\s+/i, '') };
 }
 
 /** True for a line that names a group ("For the sauce:", "Cheese sauce:") rather than an ingredient. */
@@ -187,7 +210,9 @@ export function formatQuantity(n: number): string {
 const COUNTED: Record<string, string> = { cup: 'cups', clove: 'cloves', can: 'cans', jar: 'jars', package: 'packages', packet: 'packets', bag: 'bags', box: 'boxes', bottle: 'bottles', slice: 'slices', piece: 'pieces', sprig: 'sprigs', bunch: 'bunches', stick: 'sticks', head: 'heads', stalk: 'stalks', handful: 'handfuls', pinch: 'pinches', dash: 'dashes', pint: 'pints', quart: 'quarts', gallon: 'gallons', sheet: 'sheets', fillet: 'fillets', rasher: 'rashers', knob: 'knobs' };
 /** "clove" -> "cloves" when there is more than one; measures such as tsp, g and oz never change. */
 export function unitLabel(unit: string | null, quantity: number | null): string | null {
-  if (!unit || quantity === null || quantity <= 1) return unit;
+  if (!unit) return unit;
+  if (unit === 'l') return quantity !== null && quantity > 1 ? 'litres' : 'litre'; // a lone "l" reads like a line
+  if (quantity === null || quantity <= 1) return unit;
   return COUNTED[unit] ?? unit;
 }
 

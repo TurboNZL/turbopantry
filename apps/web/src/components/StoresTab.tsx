@@ -1,18 +1,20 @@
 import { useState } from 'react';
 import { ArrowDown, ArrowUp, Check, GripVertical, Plus, Trash2 } from 'lucide-react';
 import { GROUPS, groupOrder, sectionOf, type Store } from '@turbopantry/shared';
-import { useItems, useListEntries, useStores } from '../lib/data.ts';
+import { useStores } from '../lib/data.ts';
 import { Segmented } from './Segmented.tsx';
-import { StoreMap3D } from './floor3d/index.tsx';
+import { ZoneEditor } from './floor3d/ZoneEditor.tsx';
+import { useLayout } from '../lib/useLayout.ts';
 import { useStore } from '../lib/store.ts';
 import { toast } from '../lib/toast.ts';
 import { useApi } from '../lib/useApi.ts';
 import { cn } from '../lib/cn.ts';
 
+/** Draw the shop: areas over the grid, each holding shopping groups (saved for the household, shown in the 3D map on the Shopping page). */
 function MapPanel({ store }: { store: Store }) {
-  const { entries } = useListEntries();
-  const { items } = useItems();
-  return <StoreMap3D store={store} entries={entries} items={items} />;
+  const { layout, loaded, save } = useLayout('store', store.id);
+  if (!loaded) return <p className="text-sm text-muted" role="status">Loading the map…</p>;
+  return <ZoneEditor key={store.id} layout={layout} onSave={(l) => void save(l)} />;
 }
 
 function Layout({ store, onChanged }: { store: Store; onChanged(): void }) {
@@ -39,8 +41,8 @@ function Layout({ store, onChanged }: { store: Store; onChanged(): void }) {
         <button className={cn('btn h-11', mine && 'btn-accent')} onClick={() => updateSettings({ storeId: mine ? null : store.id })} aria-pressed={mine}>{mine ? <><Check size={16} className="mr-1 inline" />Shopping here</> : 'Shop here'}</button>
         <button className="btn h-11 !px-3" onClick={() => void remove()} aria-label="Delete layout"><Trash2 size={18} /></button>
       </div>
-      {(settings.view3d || settings.listMap3d) && <Segmented<'order' | 'map'> label="Store view" value={view} onChange={setView} options={[{ value: 'order', label: 'Order' }, { value: 'map', label: 'Map' }]} />}
-      {(settings.view3d || settings.listMap3d) && view === 'map' ? <MapPanel store={store} /> : <>
+      <Segmented<'order' | 'map'> label="Store view" value={view} onChange={setView} options={[{ value: 'order', label: 'Order' }, { value: 'map', label: 'Draw the shop' }]} />
+      {view === 'map' ? <MapPanel store={store} /> : <>
         <p className="text-sm text-muted">The order you walk the shop in. Drag a group, or use the arrows. The shopping list follows it while “Shopping here” is on.</p>
         <ol className="divide-y divide-line overflow-hidden rounded-theme border border-line">
           {order.map((g, i) => (
