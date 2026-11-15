@@ -242,12 +242,20 @@ const GROUP_WORDS: [string, string[]][] = [
   ['Pets', ['dog', 'cat', 'pet', 'kibble', 'litter']],
   ['Baby', ['nappy', 'nappies', 'formula', 'baby', 'wipes']],
 ];
-/** A best guess at the shopping group. Always editable; "Other" when nothing fits. */
-export function guessCategory(name: string): string {
-  const n = ` ${nameTokens(name).join(' ')} `;
-  // the most specific phrase wins: "peanut butter" is a spread, not dairy; "tomato paste" is a sauce, not a vegetable
-  let best: { cat: string; len: number } | null = null;
-  for (const [cat, words] of GROUP_WORDS) for (const w of words) { const t = nameTokens(w).join(' '); if (t && n.includes(` ${t} `) && (!best || t.length > best.len)) best = { cat, len: t.length }; }
+/**
+ * A best guess at the shopping group. Always editable; "Other" when nothing fits. The LAST part of a name is what the thing is ("avocado oil" is an oil,
+ * "chicken stock" a stock), so a phrase that ends the name beats one earlier in it; then the most specific (longest) phrase wins.
+ * `headFirst: false` is the older rule (longest phrase only), kept so items that still carry an old guess can be corrected once.
+ */
+export function guessCategory(name: string, headFirst = true): string {
+  const toks = nameTokens(name), n = ` ${toks.join(' ')} `;
+  let best: { cat: string; score: number } | null = null;
+  for (const [cat, words] of GROUP_WORDS) for (const w of words) {
+    const t = nameTokens(w).join(' ');
+    if (!t || !n.includes(` ${t} `)) continue;
+    const score = t.length + (headFirst && n.endsWith(` ${t} `) ? 1000 : 0);
+    if (!best || score > best.score) best = { cat, score };
+  }
   return best?.cat ?? 'Other';
 }
 

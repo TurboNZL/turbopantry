@@ -180,8 +180,8 @@ export function ShoppingPage() {
         <div className="flex gap-2">
           <input className="input find-box h-11 flex-1 text-base" placeholder={view === 'pantry' ? 'Search the pantry' : 'Add: milk, 750 ch, 2kg flour…'} aria-label={view === 'pantry' ? 'Search the pantry' : 'Add to the list'} value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="done" autoCapitalize="none" />
           {view === 'list' && text && <button className="btn btn-accent h-11 px-4" aria-label={`Add ${text}`}><Plus size={20} /></button>}
-          <button type="button" className={cn('btn h-11 px-3', view === 'pantry' && 'btn-accent')} aria-pressed={view === 'pantry'} onClick={() => setView(view === 'pantry' ? 'list' : 'pantry')} title={view === 'pantry' ? 'Back to the list' : 'Add from the pantry'}>
-            {view === 'pantry' ? <><ListChecks size={18} className="mr-1.5 inline" />List</> : <><Package size={18} className="mr-1.5 inline" />Pantry</>}</button>
+          <button type="button" className={cn('btn h-11 px-3', view === 'pantry' && 'btn-accent')} aria-pressed={view === 'pantry'} onClick={() => setView(view === 'pantry' ? 'list' : 'pantry')} title={view === 'pantry' ? 'Back to the list' : 'Add things from the pantry'}>
+            {view === 'pantry' ? <><ListChecks size={18} className="mr-1.5 inline" />List</> : <><Package size={18} className="mr-1.5 inline" />Add from pantry</>}</button>
         </div>
         {view === 'list' && text && (
           <div className="bt-menu mt-1.5 overflow-hidden" role="listbox" aria-label="Suggestions">

@@ -78,8 +78,8 @@ export function Scene3D({ cam, size, blocks, selectedId, editable = false, info,
     const fit = () => {
       const w = el.clientWidth, h = el.clientHeight;
       if (!extent) { setFit(Math.min(1.4, (w * 0.94) / (size * CELL * 1.38)), 0, 0, false); return; }
-      const span = Math.max(extent.x1 - extent.x0, extent.y1 - extent.y0, 6) * CELL * 1.42;
-      const z = Math.min(2, (w * 0.86) / span, (h * 0.8) / (span * 0.6 + extent.hh * STEP_H));
+      const span = Math.max(extent.x1 - extent.x0, extent.y1 - extent.y0, 4) * CELL * 1.2;
+      const z = Math.min(3, (w * 0.92) / span, (h * 0.9) / (span * 0.6 + extent.hh * STEP_H));
       setFit(z, ((extent.x0 + extent.x1) / 2) * CELL - (size * CELL) / 2, ((extent.y0 + extent.y1) / 2) * CELL - (size * CELL) / 2, true);
     };
     fit();

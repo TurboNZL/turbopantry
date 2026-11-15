@@ -14,7 +14,7 @@ export function StepText({ step, ingredients, hideQuantities, factor, label }: {
     let at = 0;
     times.forEach((t, j) => {
       if (t.start > at) out.push(<span key={`${k}t${j}a`}>{seg.text.slice(at, t.start)}</span>);
-      out.push(<button key={`${k}t${j}`} type="button" className="mx-0.5 inline-flex items-center gap-1 rounded-full border border-accent/50 bg-accent/10 px-2 py-0.5 align-baseline text-[0.92em] font-semibold text-inherit hover:bg-accent/20" title={`Start a ${spoken(t.seconds)} timer`} aria-label={`Start a ${spoken(t.seconds)} timer`} onClick={() => { askToNotify(); start(`${label}: ${spoken(t.seconds)}`, t.seconds); }}><Timer size={13} aria-hidden />{seg.text.slice(t.start, t.end)}</button>);
+      out.push(<button key={`${k}t${j}`} type="button" className="mx-0.5 inline-flex items-center gap-1 rounded-full border border-accent/50 bg-accent/10 px-2 py-0.5 align-baseline text-[0.92em] font-semibold text-inherit hover:bg-accent/20" title={`Start a ${spoken(t.seconds)} timer`} aria-label={`Start a ${spoken(t.seconds)} timer`} onClick={(e) => { e.stopPropagation(); e.preventDefault(); askToNotify(); start(`${label}: ${spoken(t.seconds)}`, t.seconds); }}><Timer size={13} aria-hidden />{seg.text.slice(t.start, t.end)}</button>);
       at = t.end;
     });
     if (at < seg.text.length) out.push(<span key={`${k}z`}>{seg.text.slice(at)}</span>);

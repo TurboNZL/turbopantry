@@ -67,6 +67,7 @@ export function RecipePage() {
   const mode = useStore((st) => st.settings.unitMode);
   const updateSettings = useStore((st) => st.updateSettings);
   const easy = useEasy();
+  const stepQuantities = useStore((st) => st.settings.stepQuantities);
 
   // a recipe that does not say how many it serves still scales: as batches (½×, 1×, 2×…)
   const known = !!r?.servings;
@@ -160,8 +161,9 @@ export function RecipePage() {
           {r.ingredients.length ? <IngredientList items={r.ingredients} factor={factor} showQuantities={showQuantities} mode={mode} byId={byId} /> : <p className="text-sm text-muted">No ingredients.</p>}
         </section>
         <section className="space-y-3">
-          <h2 className="font-semibold">Method</h2>
-          {r.steps.length ? <ol className="space-y-3">{r.steps.map((s, i) => <li key={i} className="flex gap-3"><span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-fg">{i + 1}</span><span><StepText step={s} ingredients={r.ingredients} hideQuantities={!showQuantities} factor={factor} label={r.title} /></span></li>)}</ol>
+          <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">Method</h2>
+            <button type="button" role="switch" aria-checked={stepQuantities} className="flex min-h-[2.5rem] items-center gap-2 rounded-theme border border-line bg-raised px-3 text-sm" onClick={() => updateSettings({ stepQuantities: !stepQuantities })} title="Show or hide the amounts written next to ingredients in the steps">{stepQuantities ? 'Amounts in steps: on' : 'Amounts in steps: off'}</button></div>
+          {r.steps.length ? <ol className="space-y-3">{r.steps.map((s, i) => <li key={i} className="flex gap-3"><span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-fg">{i + 1}</span><span><StepText step={s} ingredients={r.ingredients} hideQuantities={!showQuantities || !stepQuantities} factor={factor} label={r.title} /></span></li>)}</ol>
             : <p className="text-sm text-muted">No method written down.</p>}
           {r.notes && <div className="card p-3 text-sm"><div className="mb-1 font-semibold">Notes</div><p className="whitespace-pre-line">{r.notes}</p></div>}
         </section>

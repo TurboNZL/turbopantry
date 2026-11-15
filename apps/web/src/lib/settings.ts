@@ -11,6 +11,10 @@ export interface DeviceSettings {
   showQuantities: boolean;
   /** Recipes: how amounts are shown. "original" as written, "metric-cups" (oz and lb become g, cups stay), "metric-grams" (and cups of flour, sugar, butter, oats become g). */
   unitMode: 'original' | 'metric-cups' | 'metric-grams';
+  /** Recipes: show the amounts that sit next to an ingredient inside the method ("add 175 g bacon"). Independent of the ingredient list's own amounts. */
+  stepQuantities: boolean;
+  /** Timers: play the beeps when one rings (the buzz and the message stay). */
+  timerSound: boolean;
   /** Easy mode: the simplest screens (big controls, few choices, advanced things hidden). Off by default. */
   easyMode: boolean;
   /** Pantry rows show where an item is kept (opt-in; the kitchen view uses places either way). */
@@ -31,7 +35,7 @@ export interface DeviceSettings {
 
 export const DEFAULT_SETTINGS: DeviceSettings = {
   theme: 'auto', ui: 'auto', layout: 'side', glass: 'regular', wallpaper: false, wallpaperCustom: false, wallpaperDarkness: 0.35,
-  showQuantities: true, unitMode: 'original', storeId: null, showPlaces: false, easyMode: false, listNotifications: false, themeUpdates: true, themesToken: '', serverUrl: '', token: '', cfAccessId: '', cfAccessSecret: '',
+  showQuantities: true, unitMode: 'original', storeId: null, showPlaces: false, easyMode: false, stepQuantities: true, timerSound: true, listNotifications: false, themeUpdates: true, themesToken: '', serverUrl: '', token: '', cfAccessId: '', cfAccessSecret: '',
 };
 
 const KEY = 'turbopantry.settings';
