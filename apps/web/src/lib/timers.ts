@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { toast } from './toast.ts';
+import { useStore } from './store.ts';
 
 export interface Timer { id: number; label: string; total: number; /** when it rings (ms since 1970); null while paused */ endsAt: number | null; /** what is left while paused (seconds) */ left: number; rang: boolean }
 interface State { timers: Timer[]; start(label: string, seconds: number): void; pause(id: number): void; resume(id: number): void; remove(id: number): void; add(id: number, seconds: number): void; ring(id: number): void }
@@ -17,12 +18,13 @@ export const useTimers = create<State>((set) => ({
 
 export const clock = (sec: number): string => { const s = Math.max(0, Math.ceil(sec)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60; return h ? `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}` : `${m}:${String(r).padStart(2, '0')}`; };
 /** "20 min", "1 h 30 min", "45 s" */
-export const spoken = (sec: number): string => { const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60); if (sec < 60) return `${sec} s`; return h ? `${h} h${m ? ` ${m} min` : ''}` : `${m} min`; };
+export const spoken = (sec: number): string => { const h = Math.floor(sec / 3600), m = Math.round(((sec % 3600) / 60) * 2) / 2; if (sec < 60) return `${sec} s`; const mm = Number.isInteger(m) ? String(m) : `${Math.floor(m)}½`; return h ? `${h} h${m ? ` ${mm} min` : ''}` : `${mm} min`; };
 
 let audio: AudioContext | null = null;
 /** A short run of beeps, a buzz and a message: a timer that rings cannot be missed even with the screen off or the page in the background (it is checked against the clock, not counted). */
 export function alarm(label: string) {
   try {
+    if (!useStore.getState().settings.timerSound) throw new Error('sound is off');
     audio ??= new AudioContext();
     for (let i = 0; i < 4; i++) {
       const o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime + i * 0.35;

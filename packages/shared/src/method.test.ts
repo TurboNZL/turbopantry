@@ -85,7 +85,7 @@ describe('findTimes', () => {
   it('reads minutes, hours, seconds and mixtures', () => {
     expect(sec('Bake for 20 minutes.')).toEqual([1200]);
     expect(sec('Simmer 1 hour 30 minutes, then rest 5 mins')).toEqual([5400, 300]);
-    expect(sec('Cook 10-15 min')).toEqual([900]);
+    expect(sec('Cook 10-15 min')).toEqual([750]); expect(sec('Bake 15-20 minutes')).toEqual([1050]);
     expect(sec('Roast 1½ hours')).toEqual([5400]);
     expect(sec('Stir for 45 seconds')).toEqual([45]);
   });

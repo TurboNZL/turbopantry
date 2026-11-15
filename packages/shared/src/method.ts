@@ -96,12 +96,12 @@ const unitSeconds = (u: string): number => (/^h/i.test(u) ? 3600 : /^m/i.test(u)
 
 /**
  * Time periods written in a method step ("20 minutes", "1 hour 30 minutes", "10-15 min", "1½ hours", "45 seconds"), with where they sit in the text and how many
- * seconds they are. A range counts as its upper end. Only whole words with a time unit match, so "5 g" or "2 tablespoons" never do.
+ * seconds they are. A range counts as its average ("15-20 minutes" is 17½). Only whole words with a time unit match, so "5 g" or "2 tablespoons" never do.
  */
 export function findTimes(text: string): TimeSpan[] {
   const out: TimeSpan[] = [];
   for (const m of text.matchAll(TIME_RE)) {
-    const seconds = m[1] !== undefined ? num(m[1]) * 3600 + num(m[3]!) * 60 : Math.max(num(m[5]!), m[6] ? num(m[6]) : 0) * unitSeconds(m[7]!);
+    const seconds = m[1] !== undefined ? num(m[1]) * 3600 + num(m[3]!) * 60 : (m[6] ? (num(m[5]!) + num(m[6])) / 2 : num(m[5]!)) * unitSeconds(m[7]!);
     if (seconds >= 1 && seconds <= 48 * 3600) out.push({ start: m.index, end: m.index + m[0].length, seconds: Math.round(seconds) });
   }
   return out;

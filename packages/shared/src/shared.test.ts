@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displayAmount, normaliseQuantityText, unscalableLines, formatQuantity, ingredientsToBlock, parseIngredient, parseIngredientBlock, parseMinutes, parseQuantity, parseServings, scaleIngredient, unitLabel, splitAmount } from './index.ts';
+import { displayAmount, normaliseQuantityText, unscalableLines, formatQuantity, ingredientsToBlock, parseIngredient, parseIngredientBlock, parseMinutes, parseQuantity, parseServings, scaleIngredient, unitLabel, splitAmount, guessCategory } from './index.ts';
 
 describe('parseQuantity', () => {
   it.each([['1', 1], ['1/2', 0.5], ['1 1/2', 1.5], ['½', 0.5], ['1½', 1.5], ['2.5', 2.5], ['1,5', 1.5]])('%s', (s, n) => expect(parseQuantity(s)).toBeCloseTo(n));
@@ -94,4 +94,18 @@ describe('splitAmount', () => {
     expect(splitAmount('salt to taste')).toEqual({ amount: '', rest: 'salt to taste' });
     expect(splitAmount('a pinch of salt')).toEqual({ amount: '', rest: 'a pinch of salt' });
   });
+});
+
+describe('two measures on one line', () => {
+  const p = (l: string) => { const i = parseIngredient(l); return [i.quantity, i.unit, i.name, i.note]; };
+  it('keeps the kitchen measure and notes the metric one', () => {
+    expect(p('18.2g/1 tbs olive oil')).toEqual([1, 'tbsp', 'olive oil', '18.2g']);
+    expect(p('40g (1/2 cup) grated tasty cheese')).toEqual([0.5, 'cup', 'grated tasty cheese', '40g']);
+    expect(p('40g/1/2 cup grated tasty cheese')).toEqual([0.5, 'cup', 'grated tasty cheese', '40g']);
+  });
+  it('N x size is N of them', () => { expect(p('3 1/2 x 350g Kitchen Creme Royal potato mash')).toEqual([3.5, null, 'Kitchen Creme Royal potato mash', '350g each']); });
+  it('a plain weight is left alone', () => { expect(p('400g can crushed tomatoes')[0]).toBe(400); expect(p('2 tbs tomato paste')).toEqual([2, 'tbsp', 'tomato paste', null]); });
+});
+describe('the last part of a name decides its group', () => {
+  it('oil is an oil, not a fruit', () => { expect(guessCategory('Avocado oil')).not.toBe(guessCategory('Avocado')); expect(guessCategory('Avocado oil', false)).toBe(guessCategory('Avocado')); });
 });
