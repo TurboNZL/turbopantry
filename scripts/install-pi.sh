@@ -8,7 +8,7 @@
 # the summary it prints first names the few things that live outside it (the system user, the systemd unit, the sudoers file, apt packages).
 set -euo pipefail
 
-USER_NAME="turbopantry"; INSTALL_DIR=""; APP_DIR=""; DATA_DIR=""; PORT="47900"; REPO="https://github.com/TurboNZL/turbopantry.git"; BRANCH="main"; ADMIN_NAME="admin"
+USER_NAME="${SUDO_USER:-turbopantry}"; INSTALL_DIR=""; APP_DIR=""; DATA_DIR=""; PORT="47900"; REPO="https://github.com/TurboNZL/turbopantry.git"; BRANCH="main"; ADMIN_NAME="admin"
 DRY=0; YES=0; BROWSER=1
 
 usage() { cat <<USAGE
@@ -19,7 +19,8 @@ Usage: install-pi.sh [options]
   --data-dir PATH     keep the data somewhere else than <install-dir>/data (rarely needed)
   --app-dir PATH      keep the program somewhere else than <install-dir>/app (rarely needed)
   --port N          port of the server (default $PORT)
-  --user NAME       the system user that runs the server (default $USER_NAME)
+  --user NAME       the account that runs the server. Default: the account that ran sudo (so no extra account is created);
+                    only a direct root login falls back to a dedicated "turbopantry" account
   --repo URL        where to download TurboPantry from (default $REPO)
   --branch NAME     branch to install (default $BRANCH)
   --no-browser      do not install Chromium (it is only used to read Osta links; about 300 MB)
