@@ -58,3 +58,6 @@ In a recipe's method, ingredients are highlighted, and every time (“20 minutes
 
 ## Double-click and easy mode
 With a mouse, **double-click** a pantry item to add it to the list, and double-click a shopping line to open it in the pantry. **Settings → Appearance → Easy mode** is the simplest version of the app: bigger text and buttons, one row per item (tap it for a few big choices), the bottom bar everywhere, and the advanced screens tucked away.
+
+## Cooking
+**I cooked this** asks how much of each ingredient you have *now*. Each number starts at what you had minus what the recipe calls for; correct it to what is really left and press Update (it can be undone). In easy mode the questions come one at a time. A time written as a range (“15-20 minutes”) starts a timer for the average. **Settings → Appearance** has a switch for the timer sound, and the Method heading has a switch for the amounts written next to ingredients in the steps.

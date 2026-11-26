@@ -66,6 +66,22 @@ function describesOnly(seg: string): boolean {
   return words.length > 0 && words.length <= 3 && words.every((w) => ADJECTIVES.has(w) || /^(?:.{3,}less|.{2,}ly|.{4,}ed)$/.test(w));
 }
 
+
+const KITCHEN_UNIT = String.raw`(?:cups?|tbsps?|tbs|tablespoons?|tsps?|teaspoons?)`;
+const METRIC_UNIT = String.raw`(?:kg|g|mg|ml|l|litres?|liters?)`;
+/**
+ * Some sites write both measures of one thing: "18.2g/1 tbs olive oil", "40g (1/2 cup) grated cheese", "3 1/2 x 350g potato mash". The line then reads as the kitchen measure
+ * ("1 tbs olive oil", "1/2 cup grated cheese") with the metric one kept as a note, instead of the converted weight becoming the amount; and "N x 350g" is N of
+ * them, "350g each". Only these exact shapes are touched.
+ */
+function kitchenMeasureFirst(text: string): string {
+  const both = new RegExp(String.raw`^\s*(${QTY}\s*${METRIC_UNIT})\s*(?:/|\()\s*(${QTY}\s*${KITCHEN_UNIT})\b\.?\s*\)?\s*(?:of\s+)?(.*)$`, 'i').exec(text);
+  if (both && both[3]) return `${both[2]} ${both[3]} (${both[1]!.replace(/\s+/g, '')})`;
+  const times = new RegExp(String.raw`^\s*(${QTY})\s*[x×]\s*(${QTY}\s*${METRIC_UNIT})\b\.?\s*(?:of\s+)?(.*)$`, 'i').exec(text);
+  if (times && times[3]) return `${times[1]} ${times[3]} (${times[2]!.replace(/\s+/g, '')} each)`;
+  return text;
+}
+
 /**
  * Splits one ingredient line into quantity, unit, name and note. Never throws and never drops text: when it cannot find a
  * quantity the whole line becomes the name, and `raw` always holds the original.
@@ -77,6 +93,7 @@ export function parseIngredient(line: string, section: string | null = null): In
   const raw = line.replace(/\s+/g, ' ').trim();
   const out: Ingredient = { raw, quantity: null, quantityMax: null, unit: null, name: raw, note: null, section };
   let rest = normaliseQuantityText(raw);
+  rest = kitchenMeasureFirst(rest);
 
   const m = LEADING.exec(rest);
   if (m) {

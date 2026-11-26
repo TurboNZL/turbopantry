@@ -4,6 +4,7 @@ import { displayAmount, formatQuantity, titleCase, type Item, type Recipe } from
 import { cn } from '../lib/cn.ts';
 import { StepText } from './StepText.tsx';
 import { nativeCook } from '../lib/native.ts';
+import { useStore } from '../lib/store.ts';
 
 type Mode = 'original' | 'metric-cups' | 'metric-grams';
 
@@ -53,8 +54,10 @@ export function RecipeFullscreen({ r, factor, shown, known, onServings, showQuan
 
   useEffect(() => { document.getElementById(`cook-step-${cur}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, [cur]);
 
+  const stepQuantities = useStore((st) => st.settings.stepQuantities);
+  const setStore = useStore((st) => st.updateSettings);
   const step = known ? 1 : 0.5;
-  const stepText = (i: number) => <StepText step={r.steps[i] ?? ''} ingredients={r.ingredients} hideQuantities={!showQuantities} factor={factor} label={r.title} />;
+  const stepText = (i: number) => <StepText step={r.steps[i] ?? ''} ingredients={r.ingredients} hideQuantities={!showQuantities || !stepQuantities} factor={factor} label={r.title} />;
   if (pip) { // the small floating window: only the step, the buttons are the window's own
     return (
       <div className="fixed inset-0 z-[70] flex flex-col justify-center gap-1 overflow-hidden bg-bg p-3 text-fg" role="status" aria-label="Current step">
@@ -73,6 +76,7 @@ export function RecipeFullscreen({ r, factor, shown, known, onServings, showQuan
           <span className="min-w-[4.5rem] text-center text-sm tabular-nums">{known ? `${shown} ${shown === 1 ? 'serving' : 'servings'}` : `${formatQuantity(shown)}× batch`}</span>
           <button className="btn btn-ghost flex h-11 w-11 items-center justify-center !p-0" aria-label="More servings" onClick={() => onServings(shown + step)}><Plus size={18} /></button>
         </div>
+        <button type="button" role="switch" aria-checked={stepQuantities} className="btn h-11 text-sm" onClick={() => setStore({ stepQuantities: !stepQuantities })} title="Amounts written next to ingredients in the steps">{stepQuantities ? 'Step amounts: on' : 'Step amounts: off'}</button>
         {nativeCook.supported() && <button className="btn h-11" onClick={() => nativeCook.enterPip()} aria-label="Picture in picture" title="Keep the step in a small window"><PictureInPicture2 size={18} /></button>}
         <button className="btn h-11" onClick={onClose} aria-label="Leave full screen"><Minimize2 size={18} /><span className="hidden sm:inline">Exit</span></button>
       </div>

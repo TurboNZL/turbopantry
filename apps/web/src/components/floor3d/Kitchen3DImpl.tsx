@@ -29,7 +29,7 @@ export function Kitchen3DImpl({ items, onChange, onOut, onList, onClose }: Kitch
   const [adding, setAdding] = useState(false);
   const [q, setQ] = useState('');
 
-  const tracked = useMemo(() => items.filter((i) => i.tracked), [items]);
+  const tracked = items; // every item is in the pantry (out of is just none): the same set the pantry list shows
   // the first block with a place name owns the items of that name
   const { byBlock, other } = useMemo(() => {
     const owner = new Map<string, string>();

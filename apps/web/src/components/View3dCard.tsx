@@ -17,8 +17,9 @@ function Switch({ label, hint, on, onChange }: { label: string; hint?: string; o
 export function View3dCard() {
   const { settings, updateSettings } = useStore();
   return (
-    <Section title="Pantry rows">
+    <Section title="Pantry and timers">
       <Switch label="Show where things are kept" hint="Adds the place (Fridge, Cupboard…) after each item's name in the pantry list. Off by default; the 3D kitchen uses places either way." on={settings.showPlaces} onChange={(v) => updateSettings({ showPlaces: v })} />
+      <Switch label="Timer sound" hint="Beeps when a recipe timer rings. The buzz and the on-screen message stay on either way." on={settings.timerSound} onChange={(v) => updateSettings({ timerSound: v })} />
     </Section>
   );
 }

@@ -133,6 +133,8 @@ const MIGRATIONS: string[] = [
   `ALTER TABLE items ADD COLUMN essential INTEGER NOT NULL DEFAULT 0;`,
   // one tap on + or - now changes an amount by the item's whole buying amount (100% of it): every item's step is reset to its default amount (still editable per item)
   `UPDATE items SET step = default_qty WHERE default_qty > 0;`,
+  // one-time corrections that must not run twice
+  `CREATE TABLE flags (name TEXT PRIMARY KEY);`,
 ];
 
 export type Db = DatabaseSync;
@@ -157,6 +159,15 @@ function regroup(db: Db) {
     const rows = db.prepare(`SELECT id, name, category FROM ${table}`).all() as { id: number; name: string; category: string }[];
     const set = db.prepare(`UPDATE ${table} SET category = ? WHERE id = ?`);
     for (const r of rows) if (!GROUPS.includes(r.category)) set.run(guessCategory(r.name), r.id);
+  }
+  // the last word of a name decides its group now ("avocado oil" is an oil): once, items and lines still carrying the OLD guess get the new one; a group chosen by hand is never touched
+  if (!db.prepare("SELECT 1 FROM flags WHERE name = 'head-noun-groups'").get()) {
+    for (const table of ['items', 'list_items']) {
+      const rows = db.prepare(`SELECT id, name, category FROM ${table}`).all() as { id: number; name: string; category: string }[];
+      const set = db.prepare(`UPDATE ${table} SET category = ? WHERE id = ?`);
+      for (const r of rows) { const old = guessCategory(r.name, false), now = guessCategory(r.name); if (r.category === old && now !== old) set.run(now, r.id); }
+    }
+    db.prepare("INSERT INTO flags (name) VALUES ('head-noun-groups')").run();
   }
 }
 
